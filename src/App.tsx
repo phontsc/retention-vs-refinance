@@ -111,22 +111,23 @@ export default function App() {
 
   // 1. Core States
   const [loanInput, setLoanInput] = useState<LoanInput>({
-    outstandingPrincipal: 3500000,
-    currentInterestRate: 6.25,
-    remainingTermMonths: 240, // 20 ปี = 240 เดือน
-    currentInstallment: 24500,
+    outstandingPrincipal: 5400000,
+    currentInterestRate: 6.50,
+    remainingTermMonths: 447, // 480 - 33 = 447 months remaining
+    currentInstallment: 20500,
 
-    borrowerType: "single",
+    borrowerType: "joint",
     gender: "male",
     borrowerAge: 35,
-    borrowerAgeAtContract: 33,
+    borrowerAgeAtContract: 32,
     borrower2Age: 32,
     borrower2Gender: "female",
-    startingLoanAmount: 4000000,
+    startingLoanAmount: 5400000,
 
     // Contract dates
-    contractStartDate: "2024-06-01",
-    startingTermMonths: 360, // 30 ปี
+    contractStartDate: "2023-08-16",
+    retentionStartDate: "2026-08-16",
+    startingTermMonths: 480, // 480 เดือน (40 ปี)
 
     // Related Expenses
     appraisalFee: 3000,
@@ -153,15 +154,15 @@ export default function App() {
     mrta2PaymentPattern: "single",
     mrta2SurrenderRate3Yr: 13.57,
 
-    currentYr1Rate: { type: "fixed", value: 3.5 },
-    currentYr2Rate: { type: "fixed", value: 3.8 },
-    currentYr3Rate: { type: "fixed", value: 4.2 },
-    currentYr4PlusRate: { type: "mrr", value: -1.0 },
+    currentYr1Rate: { type: "fixed", value: 2.69 },
+    currentYr2Rate: { type: "fixed", value: 2.89 },
+    currentYr3Rate: { type: "mrr", value: -5.31 },
+    currentYr4PlusRate: { type: "fixed", value: 2.69 },
 
-    currentYr1Installment: 23000,
-    currentYr2Installment: 24000,
-    currentYr3Installment: 25000,
-    currentYr4PlusInstallment: 26000,
+    currentYr1Installment: 14300,
+    currentYr2Installment: 15400,
+    currentYr3Installment: 20500,
+    currentYr4PlusInstallment: 14300,
 
     prepaymentFeeRate: 3.0,
     prepaymentLockMonths: 36,
@@ -169,16 +170,19 @@ export default function App() {
     receivesSubsidy: true,
     subsidyAmount: 40000, // ค่าจดจำนองที่ธนาคารเดิมสำรองจ่ายให้ 1%
     subsidyLockMonths: 36,
-    elapsedMonths: 18, // ผ่อนมาแล้ว 18 ด.
+    elapsedMonths: 33, // งวดผ่อนมาแล้ว 33 ด.
 
     hasInsurancePenalty: true,
     insurancePenaltyRate: 0.35,
     insurancePenaltyMonths: 36,
 
     historicalPayments: [
-      { id: "h1", monthIndex: 1, payDate: "2026-01-02", paymentAmount: 23000, interestCalculated: 11666.67, principalDeducted: 11333.33, endingBalance: 3988666.67 },
-      { id: "h2", monthIndex: 2, payDate: "2026-02-02", paymentAmount: 23000, interestCalculated: 11633.61, principalDeducted: 11366.39, endingBalance: 3977300.28 },
-      { id: "h3", monthIndex: 3, payDate: "2026-03-02", paymentAmount: 23000, interestCalculated: 11600.46, principalDeducted: 11399.54, endingBalance: 3965900.74 }
+      { id: "h1", monthIndex: 1, payDate: "2023-08-31", paymentAmount: 29700, interestCalculated: 5970, principalDeducted: 23730, endingBalance: 5376270 },
+      { id: "h2", monthIndex: 2, payDate: "2023-08-31", paymentAmount: 14300, interestCalculated: 0, principalDeducted: 14300, endingBalance: 5361970 },
+      { id: "h3", monthIndex: 3, payDate: "2023-09-01", paymentAmount: 14300, interestCalculated: 395, principalDeducted: 13905, endingBalance: 5348065 },
+      { id: "h4", monthIndex: 4, payDate: "2023-09-30", paymentAmount: 17200, interestCalculated: 11430, principalDeducted: 5770, endingBalance: 5342295 },
+      { id: "h5", monthIndex: 5, payDate: "2023-09-30", paymentAmount: 44000, interestCalculated: 0, principalDeducted: 44000, endingBalance: 5298295 },
+      { id: "h6", monthIndex: 6, payDate: "2023-10-05", paymentAmount: 14300, interestCalculated: 1952, principalDeducted: 12348, endingBalance: 5285947 },
     ]
   });
 
@@ -196,6 +200,41 @@ export default function App() {
   const [activeEditorTab, setActiveEditorTab] = useState<string>("ghb"); // defaults to the preselected bank ID
   const [activeConfigSubTab, setActiveConfigSubTab] = useState<"borrower" | "teaser_rates" | "expenses" | "mrta" | "mrta_calc" | "penalties">("borrower");
   const [botHistoricalMrrs, setBotHistoricalMrrs] = useState<Record<string, { periodFromApi: string, mrr: string }[] | null>>({});
+
+  // States for past payment ledger comparison graph and simulation scenario
+  const [simulatedPrepayAmount, setSimulatedPrepayAmount] = useState<number>(10000); // Default simulated prepay to 10,000 THB
+  const [ledgerVisualTab, setLedgerVisualTab] = useState<"balance" | "payments">("balance");
+  const [hoveredInstallmentIndex, setHoveredInstallmentIndex] = useState<number | null>(null);
+  const [showStdAmortizationTable, setShowStdAmortizationTable] = useState(false);
+
+  // Decoupled Simulation States for Original Loan Panel
+  const [origSimRates, setOrigSimRates] = useState({
+    yr1: { type: "fixed", value: 2.69 },
+    yr2: { type: "fixed", value: 2.89 },
+    yr3: { type: "mrr", value: -5.31 },
+    yr4Plus: { type: "fixed", value: 2.69 },
+  });
+  const [origSimInstallments, setOrigSimInstallments] = useState({
+    yr1: 14300,
+    yr2: 15400,
+    yr3: 20500,
+    yr4Plus: 14300,
+  });
+
+  const handleOrigSimRateChange = (
+    key: "yr1" | "yr2" | "yr3" | "yr4Plus",
+    field: "type" | "value",
+    val: any
+  ) => {
+    setOrigSimRates(prev => {
+      const currentRate = prev[key];
+      let finalValue = val;
+      if (field === "value" && currentRate.type === "mrr") {
+        finalValue = -Math.abs(val);
+      }
+      return { ...prev, [key]: { ...currentRate, [field]: finalValue } };
+    });
+  };
 
   // Build simulated pathways array containing ONLY our custom refinancing banks
   const pathwaysToSimulate = customBanks;
@@ -301,6 +340,124 @@ export default function App() {
 
   // Perform multi-pathway calculations
   const { monthlyList, results } = performMultiAmortization(loanInput, pathwaysToSimulate, currentBankMrrVal);
+
+  const { standardInt, actualInt, savings, standardSchedule, actualSchedule } = React.useMemo(() => {
+    // Standard Amortization over 36 periods starting from active outstanding principal
+    let balStd3Yr = loanInput.outstandingPrincipal;
+    let totalIntStd3Yr = 0;
+    const stdSchedule = [];
+    
+    // Actual Amortization over 36 periods (with simulated extra prepayments)
+    let balAct3Yr = loanInput.outstandingPrincipal;
+    let totalIntAct3Yr = 0;
+    const actSchedule = [];
+
+    const mrr = currentBankMrrVal;
+
+    // Daily interest calculation from retention start date
+    const rDateStr = loanInput.retentionStartDate || "2026-08-16";
+    const rParts = rDateStr.split("-");
+    const rYear = parseInt(rParts[0], 10) || 2026;
+    const rMonth = (parseInt(rParts[1], 10) - 1) || 7;
+    const rDay = parseInt(rParts[2], 10) || 16;
+
+    for (let m = 1; m <= 36; m++) {
+      // Standard Rate & Installment
+      let ratePeriod = origSimRates.yr4Plus;
+      let installment = origSimInstallments.yr4Plus;
+
+      if (m <= 12) {
+        ratePeriod = origSimRates.yr1;
+        installment = origSimInstallments.yr1;
+      } else if (m <= 24) {
+        ratePeriod = origSimRates.yr2;
+        installment = origSimInstallments.yr2;
+      } else if (m <= 36) {
+        ratePeriod = origSimRates.yr3;
+        installment = origSimInstallments.yr3;
+      }
+
+      const activeRate = resolveRate(mrr, ratePeriod);
+
+      // Determine starting/ending dates of this period to count exact days
+      const prevDate = new Date(rYear, rMonth + (m - 1), rDay);
+      const currDate = new Date(rYear, rMonth + m, rDay);
+      const prevUtc = Date.UTC(prevDate.getFullYear(), prevDate.getMonth(), prevDate.getDate());
+      const currUtc = Date.UTC(currDate.getFullYear(), currDate.getMonth(), currDate.getDate());
+      const daysInPeriod = Math.max(28, Math.min(31, Math.floor((currUtc - prevUtc) / (1000 * 60 * 60 * 24))));
+
+      const pStartDate = (m === 1) ? prevDate : new Date(prevDate.getTime() + 24 * 60 * 60 * 1000);
+      const pEndDate = currDate;
+
+      const formatD = (d: Date) => {
+        const day = d.getDate().toString().padStart(2, "0");
+        const month = (d.getMonth() + 1).toString().padStart(2, "0");
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+      };
+
+      const dateRangeStr = `${formatD(pStartDate)} - ${formatD(pEndDate)}`;
+
+      const dailyRate = activeRate / 100 / 365;
+
+      // Standard Step
+      const begStd = balStd3Yr;
+      const intStd = Number((balStd3Yr * dailyRate * daysInPeriod).toFixed(2));
+      const payStd = Math.min(installment, balStd3Yr + intStd);
+      const prinStd = Number((payStd - intStd).toFixed(2));
+      balStd3Yr = Math.max(0, Number((balStd3Yr - prinStd).toFixed(2)));
+      totalIntStd3Yr += intStd;
+
+      stdSchedule.push({
+        month: m,
+        rate: activeRate,
+        begBal: begStd,
+        interest: intStd,
+        payment: payStd,
+        principal: prinStd,
+        endBal: balStd3Yr,
+        days: daysInPeriod,
+        dateRange: dateRangeStr
+      });
+
+      // Actual Simulation Step
+      const begAct = balAct3Yr;
+      const intAct = Number((balAct3Yr * dailyRate * daysInPeriod).toFixed(2));
+      const payAct = Math.min(installment + simulatedPrepayAmount, balAct3Yr + intAct);
+      const prinAct = Number((payAct - intAct).toFixed(2));
+      balAct3Yr = Math.max(0, Number((balAct3Yr - prinAct).toFixed(2)));
+      totalIntAct3Yr += intAct;
+
+      actSchedule.push({
+        month: m,
+        rate: activeRate,
+        begBal: begAct,
+        interest: intAct,
+        payment: payAct,
+        principal: prinAct,
+        endBal: balAct3Yr,
+        days: daysInPeriod,
+        dateRange: dateRangeStr
+      });
+    }
+
+    return { 
+      standardInt: Number(totalIntStd3Yr.toFixed(2)), 
+      actualInt: Number(totalIntAct3Yr.toFixed(2)), 
+      savings: Number((totalIntStd3Yr - totalIntAct3Yr).toFixed(2)),
+      standardSchedule: stdSchedule,
+      actualSchedule: actSchedule
+    };
+  }, [
+    loanInput.outstandingPrincipal,
+    loanInput.contractStartDate,
+    loanInput.retentionStartDate,
+    loanInput.elapsedMonths,
+    origSimRates,
+    origSimInstallments,
+    simulatedPrepayAmount,
+    currentBankMrrVal
+  ]);
 
   // Synchronize and seed default customization parameters on bank rates load
   const handleRatesLoaded = (banks: BankRate[]) => {
@@ -537,12 +694,26 @@ export default function App() {
   const handleContractStartDateChange = (val: string) => {
     setLoanInput(prev => {
       const elapsed = getElapsedYears(val);
+      const parts = val.split("-");
+      let defaultRetentionDate = prev.retentionStartDate;
+      if (parts.length === 3) {
+        const y = parseInt(parts[0], 10);
+        defaultRetentionDate = `${y + 3}-${parts[1]}-${parts[2]}`;
+      }
       return {
         ...prev,
         contractStartDate: val,
+        retentionStartDate: defaultRetentionDate,
         borrowerAgeAtContract: Math.max(18, prev.borrowerAge - elapsed)
       };
     });
+  };
+
+  const handleRetentionStartDateChange = (val: string) => {
+    setLoanInput(prev => ({
+      ...prev,
+      retentionStartDate: val
+    }));
   };
 
   const handleStartingTermMonthsChange = (val: number) => {
@@ -599,13 +770,29 @@ export default function App() {
     setLoanInput(prev => {
       const currentRate = prev[periodKey];
       let finalValue = val;
-      if (field === "value" && currentRate.type === "mrr" && val > 0) {
-        finalValue = -val;
+      
+      // If setting the numerical value for MRR type, force it to be negative
+      if (field === "value" && currentRate.type === "mrr") {
+        finalValue = -Math.abs(val);
       }
+      
       let updates: any = { [field]: finalValue };
-      if (field === "type" && val === "mrr" && !currentRate.mrrBaseline) {
-         updates.mrrBaseline = currentBankMrrVal;
+      
+      // If switching type to MRR, set the default baseline and force the current value to be negative
+      if (field === "type" && val === "mrr") {
+        if (!currentRate.mrrBaseline) {
+          updates.mrrBaseline = currentBankMrrVal;
+        }
+        if (currentRate.value > 0) {
+          updates.value = -currentRate.value;
+        }
+      } else if (field === "type" && val === "fixed") {
+        // Switching type back to fixed, restore it as positive
+        if (currentRate.value < 0) {
+          updates.value = Math.abs(currentRate.value);
+        }
       }
+      
       return {
         ...prev,
         [periodKey]: {
@@ -659,6 +846,21 @@ export default function App() {
 
     const sParts = parseDateParts(contractStartDate);
 
+    // High-fidelity fallback database entries for bank MRRs to guarantee calculation accuracy even if BOT network API fails
+    const fallbackMrrHistory: Record<string, { date: string, mrr: number }[]> = {
+      lhbank: [
+        { date: "1900-01-01", mrr: 8.53 }, // Catch-all baseline
+        { date: "2023-01-01", mrr: 8.12 },
+        { date: "2023-04-01", mrr: 8.30 },
+        { date: "2023-06-01", mrr: 8.55 },
+        { date: "2023-10-25", mrr: 8.80 },
+        { date: "2024-05-22", mrr: 8.55 },
+        { date: "2025-01-01", mrr: 8.53 }, // Holds 8.53% until Aug 19, 2025
+        { date: "2025-08-20", mrr: 8.28 }, // Reduced to 8.28% on 20 Aug 2025
+        { date: "2025-10-24", mrr: 8.18 }, // Current baseline
+      ]
+    };
+
     const calculated = sortedPayments.map((pay, i) => {
       // Month index estimation for rate lookup.
       const seqIdx = i + 1; // Used for sequential display only
@@ -675,15 +877,31 @@ export default function App() {
         if (!isNaN(utc1) && !isNaN(utc2)) {
           diffDays = Math.max(0, Math.floor((utc2 - utc1) / (1000 * 60 * 60 * 24)));
           
+          // Determine if there is any MRR rate period active under original style dayMs
+          let periodHasMrr = false;
+          const ann1 = Date.UTC(sParts.year + 1, sParts.month, sParts.day);
+          const ann2 = Date.UTC(sParts.year + 2, sParts.month, sParts.day);
+          const ann3 = Date.UTC(sParts.year + 3, sParts.month, sParts.day);
+          
+          for (let k = 1; k <= diffDays; k++) {
+            const dayMsOriginal = utc1 + (k - 1) * (1000 * 60 * 60 * 24);
+            let ratePeriodOriginal = r4;
+            if (dayMsOriginal < ann1) ratePeriodOriginal = r1;
+            else if (dayMsOriginal < ann2) ratePeriodOriginal = r2;
+            else if (dayMsOriginal < ann3) ratePeriodOriginal = r3;
+            if (ratePeriodOriginal.type === "mrr") {
+              periodHasMrr = true;
+              break;
+            }
+          }
+
           let totalInterest = 0;
           for (let k = 1; k <= diffDays; k++) {
-            // Find representative UTC midnight timestamp for the start of day k
-            const dayMs = utc1 + (k - 1) * (1000 * 60 * 60 * 24);
-            
-            // Teaser Rate change dates based on year anniversary y+1, y+2, y+3 boundaries
-            const ann1 = Date.UTC(sParts.year + 1, sParts.month, sParts.day);
-            const ann2 = Date.UTC(sParts.year + 2, sParts.month, sParts.day);
-            const ann3 = Date.UTC(sParts.year + 3, sParts.month, sParts.day);
+            // If the period has any MRR or transition, we use k (day following lastDateStr)
+            // Otherwise, for pure fixed rate periods, we use k-1 (original way)
+            const dayMs = periodHasMrr 
+              ? utc1 + k * (1000 * 60 * 60 * 24)
+              : utc1 + (k - 1) * (1000 * 60 * 60 * 24);
             
             let ratePeriod = r4;
             if (dayMs < ann1) ratePeriod = r1;
@@ -691,15 +909,21 @@ export default function App() {
             else if (dayMs < ann3) ratePeriod = r3;
             
             let applicableMrr = mrr;
+            let foundInApi = false;
+            
             if (ratePeriod.type === "mrr" && botMrrs[pay.id]) {
                 const hist = botMrrs[pay.id];
                 if (hist && hist.length > 0) {
+                    // Sort descending by periodFromApi to evaluate newest to oldest reliably
+                    const sortedHist = [...hist].sort((a, b) => b.periodFromApi.localeCompare(a.periodFromApi));
                     let activeHistMrr: number | null = null;
-                    for (const record of hist) {
+                    for (const record of sortedHist) {
                         if (!record.periodFromApi || !record.mrr || record.mrr === "-") continue;
                         const rParts = record.periodFromApi.split("-");
                         if (rParts.length !== 3) continue;
-                        const rDate = Date.UTC(parseInt(rParts[0],10), parseInt(rParts[1],10)-1, parseInt(rParts[2],10));
+                        let rYear = parseInt(rParts[0], 10);
+                        if (rYear > 2400) rYear -= 543; // Correctly normalize Buddhist year (2500+) to AD (2000+)
+                        const rDate = Date.UTC(rYear, parseInt(rParts[1], 10) - 1, parseInt(rParts[2], 10));
                         if (dayMs >= rDate) {
                             activeHistMrr = parseFloat(record.mrr);
                             break;
@@ -707,12 +931,35 @@ export default function App() {
                     }
                     if (activeHistMrr !== null && !isNaN(activeHistMrr)) {
                         applicableMrr = activeHistMrr;
+                        foundInApi = true;
                     } else {
-                        // If dayMs is before all records (e.g. weekend start), just use the oldest record (last in array)
-                        const oldest = hist[hist.length - 1];
+                        // If dayMs is before all records (e.g. weekend start), just use the oldest record (last in array after sorted ascending, i.e. first in sortedHist)
+                        const oldest = sortedHist[sortedHist.length - 1];
                         if (oldest && oldest.mrr && oldest.mrr !== "-") {
                             applicableMrr = parseFloat(oldest.mrr);
+                            foundInApi = true;
                         }
+                    }
+                }
+            }
+            
+            // Backup with high-fidelity local fallback database if not resolved from BOT API
+            if (!foundInApi && ratePeriod.type === "mrr") {
+                const bankId = currentBankId || "lhbank";
+                const bankHistory = fallbackMrrHistory[bankId];
+                if (bankHistory && bankHistory.length > 0) {
+                    let activeFallbackMrr: number | null = null;
+                    const sortedFallback = [...bankHistory].sort((a, b) => b.date.localeCompare(a.date));
+                    for (const record of sortedFallback) {
+                        const parts = record.date.split("-");
+                        const rDate = Date.UTC(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                        if (dayMs >= rDate) {
+                            activeFallbackMrr = record.mrr;
+                            break;
+                        }
+                    }
+                    if (activeFallbackMrr !== null) {
+                        applicableMrr = activeFallbackMrr;
                     }
                 }
             }
@@ -741,6 +988,324 @@ export default function App() {
     
     // Put them back in original order to prevent cursor jumping or losing focus while typing
     return payments.map(orig => calculated.find(c => c.id === orig.id) || orig);
+  };
+
+  // Dynamically calculate standard bank-mandated and simulated prepayment timelines for validation and charts
+  const getComparisonSimulations = () => {
+    const historical = [...loanInput.historicalPayments].sort((a,b) => new Date(a.payDate).getTime() - new Date(b.payDate).getTime());
+    if (historical.length === 0) return null;
+
+    const sParts = loanInput.contractStartDate.split("-");
+    const sYear = parseInt(sParts[0], 10) || 2023;
+    const sMonth = (parseInt(sParts[1], 10) - 1) || 0;
+    const sDay = parseInt(sParts[2], 10) || 16;
+
+    const fallbackMrrHistory: Record<string, { date: string, mrr: number }[]> = {
+      lhbank: [
+        { date: "1900-01-01", mrr: 8.53 }, // Catch-all baseline
+        { date: "2023-01-01", mrr: 8.12 },
+        { date: "2023-04-01", mrr: 8.30 },
+        { date: "2023-06-01", mrr: 8.55 },
+        { date: "2023-10-25", mrr: 8.80 },
+        { date: "2024-05-22", mrr: 8.55 },
+        { date: "2025-01-01", mrr: 8.53 },
+        { date: "2025-08-20", mrr: 8.28 },
+        { date: "2025-10-24", mrr: 8.18 },
+      ]
+    };
+
+    // 1. Simulate Standard Mandated Only
+    let standardBalance = loanInput.startingLoanAmount;
+    let standardLastDate = loanInput.contractStartDate;
+    let standardTotalInterest = 0;
+    let standardTotalPaid = 0;
+
+    const standardTimeline = historical.map((pay) => {
+      const d2 = new Date(pay.payDate);
+      const payUtc = Date.UTC(d2.getFullYear(), d2.getMonth(), d2.getDate());
+      
+      const ann1 = Date.UTC(sYear + 1, sMonth, sDay);
+      const ann2 = Date.UTC(sYear + 2, sMonth, sDay);
+      const ann3 = Date.UTC(sYear + 3, sMonth, sDay);
+      
+      let standardAmount = loanInput.currentYr4PlusInstallment;
+      if (payUtc < ann1) standardAmount = loanInput.currentYr1Installment;
+      else if (payUtc < ann2) standardAmount = loanInput.currentYr2Installment;
+      else if (payUtc < ann3) standardAmount = loanInput.currentYr3Installment;
+
+      let interestCalculated = 0;
+      let diffDays = 0;
+      
+      if (standardLastDate && pay.payDate) {
+        const d1 = new Date(standardLastDate);
+        const utc1 = Date.UTC(d1.getFullYear(), d1.getMonth(), d1.getDate());
+        const utc2 = Date.UTC(d2.getFullYear(), d2.getMonth(), d2.getDate());
+        
+        if (!isNaN(utc1) && !isNaN(utc2)) {
+          diffDays = Math.max(0, Math.floor((utc2 - utc1) / (1000 * 60 * 60 * 24)));
+          
+          let periodHasMrr = false;
+          for (let k = 1; k <= diffDays; k++) {
+            const dayMsOriginal = utc1 + (k - 1) * (1000 * 60 * 60 * 24);
+            let ratePeriodOriginal = loanInput.currentYr4PlusRate;
+            if (dayMsOriginal < ann1) ratePeriodOriginal = loanInput.currentYr1Rate;
+            else if (dayMsOriginal < ann2) ratePeriodOriginal = loanInput.currentYr2Rate;
+            else if (dayMsOriginal < ann3) ratePeriodOriginal = loanInput.currentYr3Rate;
+            if (ratePeriodOriginal.type === "mrr") {
+              periodHasMrr = true;
+              break;
+            }
+          }
+          
+          let localInterest = 0;
+          for (let k = 1; k <= diffDays; k++) {
+            const dayMs = periodHasMrr 
+              ? utc1 + k * (1000 * 60 * 60 * 24)
+              : utc1 + (k - 1) * (1000 * 60 * 60 * 24);
+            
+            let ratePeriod = loanInput.currentYr4PlusRate;
+            if (dayMs < ann1) ratePeriod = loanInput.currentYr1Rate;
+            else if (dayMs < ann2) ratePeriod = loanInput.currentYr2Rate;
+            else if (dayMs < ann3) ratePeriod = loanInput.currentYr3Rate;
+            
+            let applicableMrr = loanInput.currentInterestRate;
+            let foundInApi = false;
+            
+            const hist = botHistoricalMrrs[pay.id];
+            if (ratePeriod.type === "mrr" && hist && hist.length > 0) {
+              const sortedHist = [...hist].sort((a, b) => b.periodFromApi.localeCompare(a.periodFromApi));
+              let activeHistMrr: number | null = null;
+              for (const record of sortedHist) {
+                if (!record.periodFromApi || !record.mrr || record.mrr === "-") continue;
+                const rParts = record.periodFromApi.split("-");
+                if (rParts.length !== 3) continue;
+                let rYear = parseInt(rParts[0], 10);
+                if (rYear > 2400) rYear -= 543;
+                const rDate = Date.UTC(rYear, parseInt(rParts[1], 10) - 1, parseInt(rParts[2], 10));
+                if (dayMs >= rDate) {
+                  activeHistMrr = parseFloat(record.mrr);
+                  break;
+                }
+              }
+              if (activeHistMrr !== null && !isNaN(activeHistMrr)) {
+                applicableMrr = activeHistMrr;
+                foundInApi = true;
+              } else {
+                const oldest = sortedHist[sortedHist.length - 1];
+                if (oldest && oldest.mrr && oldest.mrr !== "-") {
+                  applicableMrr = parseFloat(oldest.mrr);
+                  foundInApi = true;
+                }
+              }
+            }
+            
+            if (!foundInApi && ratePeriod.type === "mrr") {
+              const bankId = currentBankId || "lhbank";
+              const bankHistory = fallbackMrrHistory[bankId];
+              if (bankHistory && bankHistory.length > 0) {
+                let activeFallbackMrr: number | null = null;
+                const sortedFallback = [...bankHistory].sort((a, b) => b.date.localeCompare(a.date));
+                for (const record of sortedFallback) {
+                  const parts = record.date.split("-");
+                  const rDate = Date.UTC(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                  if (dayMs >= rDate) {
+                    activeFallbackMrr = record.mrr;
+                    break;
+                  }
+                }
+                if (activeFallbackMrr !== null) {
+                  applicableMrr = activeFallbackMrr;
+                }
+              }
+            }
+            
+            const activeRate = resolveRate(applicableMrr, ratePeriod);
+            localInterest += (standardBalance * (activeRate / 100)) / 365;
+          }
+          interestCalculated = Number(localInterest.toFixed(2));
+        }
+      }
+
+      const principalDeducted = Number((standardAmount - interestCalculated).toFixed(2));
+      standardBalance = Number(Math.max(0, standardBalance - principalDeducted).toFixed(2));
+      standardLastDate = pay.payDate;
+      standardTotalInterest += interestCalculated;
+      standardTotalPaid += standardAmount;
+
+      return {
+        payDate: pay.payDate,
+        amount: standardAmount,
+        interest: interestCalculated,
+        principal: principalDeducted,
+        balance: standardBalance,
+        monthIndex: pay.monthIndex
+      };
+    });
+
+    // 2. Simulate Standard + Custom Prepayment
+    let simulatedBalance = loanInput.startingLoanAmount;
+    let simulatedLastDate = loanInput.contractStartDate;
+    let simulatedTotalInterest = 0;
+    let simulatedTotalPaid = 0;
+
+    const simulatedTimeline = historical.map((pay) => {
+      const d2 = new Date(pay.payDate);
+      const payUtc = Date.UTC(d2.getFullYear(), d2.getMonth(), d2.getDate());
+      
+      const ann1 = Date.UTC(sYear + 1, sMonth, sDay);
+      const ann2 = Date.UTC(sYear + 2, sMonth, sDay);
+      const ann3 = Date.UTC(sYear + 3, sMonth, sDay);
+      
+      let standardAmount = loanInput.currentYr4PlusInstallment;
+      if (payUtc < ann1) standardAmount = loanInput.currentYr1Installment;
+      else if (payUtc < ann2) standardAmount = loanInput.currentYr2Installment;
+      else if (payUtc < ann3) standardAmount = loanInput.currentYr3Installment;
+
+      const simAmount = Math.max(0, standardAmount + simulatedPrepayAmount);
+
+      let interestCalculated = 0;
+      let diffDays = 0;
+      
+      if (simulatedLastDate && pay.payDate) {
+        const d1 = new Date(simulatedLastDate);
+        const utc1 = Date.UTC(d1.getFullYear(), d1.getMonth(), d1.getDate());
+        const utc2 = Date.UTC(d2.getFullYear(), d2.getMonth(), d2.getDate());
+        
+        if (!isNaN(utc1) && !isNaN(utc2)) {
+          diffDays = Math.max(0, Math.floor((utc2 - utc1) / (1000 * 60 * 60 * 24)));
+          
+          let periodHasMrr = false;
+          for (let k = 1; k <= diffDays; k++) {
+            const dayMsOriginal = utc1 + (k - 1) * (1000 * 60 * 60 * 24);
+            let ratePeriodOriginal = loanInput.currentYr4PlusRate;
+            if (dayMsOriginal < ann1) ratePeriodOriginal = loanInput.currentYr1Rate;
+            else if (dayMsOriginal < ann2) ratePeriodOriginal = loanInput.currentYr2Rate;
+            else if (dayMsOriginal < ann3) ratePeriodOriginal = loanInput.currentYr3Rate;
+            if (ratePeriodOriginal.type === "mrr") {
+              periodHasMrr = true;
+              break;
+            }
+          }
+          
+          let localInterest = 0;
+          for (let k = 1; k <= diffDays; k++) {
+            const dayMs = periodHasMrr 
+              ? utc1 + k * (1000 * 60 * 60 * 24)
+              : utc1 + (k - 1) * (1000 * 60 * 60 * 24);
+            
+            let ratePeriod = loanInput.currentYr4PlusRate;
+            if (dayMs < ann1) ratePeriod = loanInput.currentYr1Rate;
+            else if (dayMs < ann2) ratePeriod = loanInput.currentYr2Rate;
+            else if (dayMs < ann3) ratePeriod = loanInput.currentYr3Rate;
+            
+            let applicableMrr = loanInput.currentInterestRate;
+            let foundInApi = false;
+            
+            const hist = botHistoricalMrrs[pay.id];
+            if (ratePeriod.type === "mrr" && hist && hist.length > 0) {
+              const sortedHist = [...hist].sort((a, b) => b.periodFromApi.localeCompare(a.periodFromApi));
+              let activeHistMrr: number | null = null;
+              for (const record of sortedHist) {
+                if (!record.periodFromApi || !record.mrr || record.mrr === "-") continue;
+                const rParts = record.periodFromApi.split("-");
+                if (rParts.length !== 3) continue;
+                let rYear = parseInt(rParts[0], 10);
+                if (rYear > 2400) rYear -= 543;
+                const rDate = Date.UTC(rYear, parseInt(rParts[1], 10) - 1, parseInt(rParts[2], 10));
+                if (dayMs >= rDate) {
+                  activeHistMrr = parseFloat(record.mrr);
+                  break;
+                }
+              }
+              if (activeHistMrr !== null && !isNaN(activeHistMrr)) {
+                applicableMrr = activeHistMrr;
+                foundInApi = true;
+              } else {
+                const oldest = sortedHist[sortedHist.length - 1];
+                if (oldest && oldest.mrr && oldest.mrr !== "-") {
+                  applicableMrr = parseFloat(oldest.mrr);
+                  foundInApi = true;
+                }
+              }
+            }
+            
+            if (!foundInApi && ratePeriod.type === "mrr") {
+              const bankId = currentBankId || "lhbank";
+              const bankHistory = fallbackMrrHistory[bankId];
+              if (bankHistory && bankHistory.length > 0) {
+                let activeFallbackMrr: number | null = null;
+                const sortedFallback = [...bankHistory].sort((a, b) => b.date.localeCompare(a.date));
+                for (const record of sortedFallback) {
+                  const parts = record.date.split("-");
+                  const rDate = Date.UTC(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+                  if (dayMs >= rDate) {
+                    activeFallbackMrr = record.mrr;
+                    break;
+                  }
+                }
+                if (activeFallbackMrr !== null) {
+                  applicableMrr = activeFallbackMrr;
+                }
+              }
+            }
+            
+            const activeRate = resolveRate(applicableMrr, ratePeriod);
+            localInterest += (simulatedBalance * (activeRate / 100)) / 365;
+          }
+          interestCalculated = Number(localInterest.toFixed(2));
+        }
+      }
+
+      const principalDeducted = Number((simAmount - interestCalculated).toFixed(2));
+      simulatedBalance = Number(Math.max(0, simulatedBalance - principalDeducted).toFixed(2));
+      simulatedLastDate = pay.payDate;
+      simulatedTotalInterest += interestCalculated;
+      simulatedTotalPaid += simAmount;
+
+      return {
+        payDate: pay.payDate,
+        amount: simAmount,
+        interest: interestCalculated,
+        principal: principalDeducted,
+        balance: simulatedBalance,
+        monthIndex: pay.monthIndex
+      };
+    });
+
+    // Actual Stats Accumulators (from recalculated ledger)
+    const actualTotalPaid = historical.reduce((sum, p) => sum + p.paymentAmount, 0);
+    const actualTotalInterest = historical.reduce((sum, p) => sum + p.interestCalculated, 0);
+    const actualEndingBalance = historical[historical.length - 1].endingBalance;
+
+    return {
+      standardTimeline,
+      simulatedTimeline,
+      actualTimeline: historical.map(p => ({
+        payDate: p.payDate,
+        amount: p.paymentAmount,
+        interest: p.interestCalculated,
+        principal: p.principalDeducted,
+        balance: p.endingBalance,
+        monthIndex: p.monthIndex
+      })),
+      stats: {
+        standard: {
+          totalPaid: standardTotalPaid,
+          totalInterest: standardTotalInterest,
+          endingBalance: standardBalance
+        },
+        actual: {
+          totalPaid: actualTotalPaid,
+          totalInterest: actualTotalInterest,
+          endingBalance: actualEndingBalance
+        },
+        simulated: {
+          totalPaid: simulatedTotalPaid,
+          totalInterest: simulatedTotalInterest,
+          endingBalance: simulatedBalance
+        }
+      }
+    };
   };
 
   // Fetch historical BOT MRRs dynamically for payments acting under MRR
@@ -772,7 +1337,7 @@ export default function App() {
            id: pay.id, 
            start: lastDateStr, 
            end: pay.payDate,
-           acronym: loanInput.currentBank 
+           acronym: currentBankId 
          });
       }
       lastDateStr = pay.payDate;
@@ -802,7 +1367,7 @@ export default function App() {
          }
       });
     }
-  }, [loanInput.historicalPayments, loanInput.contractStartDate, loanInput.currentBank, loanInput.currentYr1Rate, loanInput.currentYr2Rate, loanInput.currentYr3Rate, loanInput.currentYr4PlusRate, botHistoricalMrrs]);
+  }, [loanInput.historicalPayments, loanInput.contractStartDate, currentBankId, loanInput.currentYr1Rate, loanInput.currentYr2Rate, loanInput.currentYr3Rate, loanInput.currentYr4PlusRate, botHistoricalMrrs]);
 
   useEffect(() => {
     setLoanInput(prev => {
@@ -835,7 +1400,8 @@ export default function App() {
     loanInput.currentYr1Rate,
     loanInput.currentYr2Rate,
     loanInput.currentYr3Rate,
-    loanInput.currentYr4PlusRate
+    loanInput.currentYr4PlusRate,
+    botHistoricalMrrs
   ]);
 
   const handleUpdateLedgerRow = (id: string, field: "payDate" | "paymentAmount", val: any) => {
@@ -879,10 +1445,33 @@ export default function App() {
       else if (nextIndex <= 36) defaultInstallment = prev.currentYr3Installment;
       else defaultInstallment = prev.currentYr4PlusInstallment;
 
+      // Calculate next sequence's payDate by adding exactly 1 month to the previous entry or contract start date
+      let nextDateStr = "";
+      const baseDateStr = lastRow ? lastRow.payDate : prev.contractStartDate;
+      try {
+        const parts = baseDateStr.split("-");
+        if (parts.length === 3) {
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10) - 1; // 0-based
+          const d = parseInt(parts[2], 10);
+          const nextDate = new Date(y, m + 1, d);
+          const py = nextDate.getFullYear();
+          const pm = (nextDate.getMonth() + 1).toString().padStart(2, "0");
+          const pd = nextDate.getDate().toString().padStart(2, "0");
+          nextDateStr = `${py}-${pm}-${pd}`;
+        } else {
+          const d = new Date(baseDateStr);
+          d.setMonth(d.getMonth() + 1);
+          nextDateStr = d.toISOString().split("T")[0];
+        }
+      } catch (err) {
+        nextDateStr = new Date().toISOString().split("T")[0];
+      }
+
       const newRow: HistoricalPayment = {
         id: Math.random().toString(36).substring(2, 9),
         monthIndex: nextIndex,
-        payDate: new Date().toISOString().split("T")[0],
+        payDate: nextDateStr,
         paymentAmount: defaultInstallment,
         interestCalculated: 0,
         principalDeducted: 0,
@@ -948,14 +1537,31 @@ export default function App() {
           const dateStr = parts[0].trim();
           const amountStr = parts[1].trim();
           
-          let parsedDate = new Date().toISOString().split("T")[0];
-          const dateParts = dateStr.split('/');
+          let parsedDate = "";
+          const cleanDateStr = dateStr.replace(/\s+/g, ""); // Strip any whitespace
+          const dateParts = cleanDateStr.split(/[-/]/); // Split by slashes or dashes
           if (dateParts.length === 3) {
-            const day = dateParts[0].padStart(2, '0');
-            const month = dateParts[1].padStart(2, '0');
-            const yearStr = dateParts[2];
-            const year = yearStr.length === 2 ? `20${yearStr}` : yearStr;
-            parsedDate = `${year}-${month}-${day}`;
+            // Check if year is first (YYYY-MM-DD) or last (DD-MM-YYYY)
+            if (dateParts[0].length === 4) {
+              const year = dateParts[0];
+              const month = dateParts[1].padStart(2, '0');
+              const day = dateParts[2].padStart(2, '0');
+              parsedDate = `${year}-${month}-${day}`;
+            } else {
+              const day = dateParts[0].padStart(2, '0');
+              const month = dateParts[1].padStart(2, '0');
+              const yearStr = dateParts[2];
+              const year = yearStr.length === 2 ? `20${yearStr}` : yearStr;
+              parsedDate = `${year}-${month}-${day}`;
+            }
+          } else {
+            // Fallback to standard JS Date parsing
+            const parsed = new Date(dateStr);
+            if (!isNaN(parsed.getTime())) {
+              parsedDate = parsed.toISOString().split("T")[0];
+            } else {
+              parsedDate = new Date().toISOString().split("T")[0];
+            }
           }
           
           const amount = parseFloat(amountStr) || 0;
@@ -2323,20 +2929,53 @@ export default function App() {
 
                 {/* Ledger metrics outputs summaries */}
                 {loanInput.historicalPayments.length > 0 && (
-                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-150 space-y-1.5 text-[9.5px]">
-                    <div className="flex justify-between font-bold text-slate-500">
-                      <span>ยอดค้างเริ่มต้น:</span>
-                      <span className="text-slate-700 font-mono">{formatCurrency(loanInput.startingLoanAmount)}</span>
+                  <div className="bg-slate-50 rounded-xl border border-slate-200 overflow-hidden text-[9.5px]">
+                    <div className="bg-slate-100/60 py-1.5 px-2.5 border-b border-slate-200 flex justify-between items-center">
+                      <span className="font-extrabold text-slate-600">📋 ตารางผลการคำนวณหักต้นประวัติ</span>
+                      <span className="text-[8px] bg-slate-200 text-slate-700 px-1.5 py-0.2 rounded font-mono font-bold">Real Decrual</span>
                     </div>
-                    {loanInput.historicalPayments.map(pay => (
-                      <div key={pay.id} className="flex justify-between text-slate-400 font-semibold font-mono pl-2 border-l border-slate-200">
-                        <span>งวด {pay.monthIndex} (ดบ. {formatCurrency(pay.interestCalculated)} • ต้น {formatCurrency(pay.principalDeducted)}):</span>
-                        <span className="text-slate-600 font-bold">{formatCurrency(pay.endingBalance)}</span>
-                      </div>
-                    ))}
-                    <div className="pt-1.5 mt-1.5 border-t border-dashed border-slate-200 flex justify-between font-bold text-indigo-700">
+                    <table className="w-full text-left border-collapse">
+                      <thead className="bg-slate-100 text-slate-600 font-extrabold border-b border-slate-200">
+                        <tr>
+                          <th className="py-2 px-2.5 text-center">งวด</th>
+                          <th className="py-2 px-2 text-right">ค่างวด (฿)</th>
+                          <th className="py-2 px-2 text-right">ตัดดอกเบี้ย (฿)</th>
+                          <th className="py-2 px-2 text-right">ตัดเงินต้น (฿)</th>
+                          <th className="py-2 px-2.5 text-right">ยอดคงเหลือปลาย (฿)</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-150 font-semibold font-mono text-slate-700">
+                        <tr className="bg-slate-50/50">
+                          <td className="py-1.5 px-2.5 text-center text-slate-400 font-normal">แรกเริ่ม</td>
+                          <td className="py-1.5 px-2 text-slate-300 text-right">-</td>
+                          <td className="py-1.5 px-2 text-slate-300 text-right">-</td>
+                          <td className="py-1.5 px-2 text-slate-300 text-right">-</td>
+                          <td className="py-1.5 px-2.5 text-right text-slate-500 font-bold">{formatCurrency(loanInput.startingLoanAmount)}</td>
+                        </tr>
+                        {loanInput.historicalPayments.map(pay => (
+                          <tr key={pay.id} className="hover:bg-indigo-50/30 transition-colors">
+                            <td className="py-1.5 px-2.5 text-center font-bold text-slate-500">
+                              {pay.monthIndex}
+                            </td>
+                            <td className="py-1.5 px-2 text-right text-slate-800">
+                              {formatCurrency(pay.paymentAmount)}
+                            </td>
+                            <td className="py-1.5 px-2 text-right text-rose-600">
+                              {formatCurrency(pay.interestCalculated)}
+                            </td>
+                            <td className="py-1.5 px-2 text-right text-emerald-600">
+                              {formatCurrency(pay.principalDeducted)}
+                            </td>
+                            <td className="py-1.5 px-2.5 text-right text-indigo-950 font-bold">
+                              {formatCurrency(pay.endingBalance)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <div className="bg-indigo-50/50 p-2.5 border-t border-slate-200/60 flex justify-between font-bold text-indigo-950 text-[10px]">
                       <span>ยอดเหลือปลายสุดตารางคงเหลือ:</span>
-                      <span className="font-mono">{formatCurrency(loanInput.historicalPayments[loanInput.historicalPayments.length - 1].endingBalance)}</span>
+                      <span className="font-mono text-[10.5px] font-black text-indigo-700">{formatCurrency(loanInput.historicalPayments[loanInput.historicalPayments.length - 1].endingBalance)}</span>
                     </div>
                   </div>
                 )}
@@ -2350,8 +2989,868 @@ export default function App() {
                   <Check className="w-3.5 h-3.5" />
                   ซิงค์เงินคงเหลือล่าสุดไปยัง "ยอดต้นปัจจุบัน"
                 </button>
+
+                {/* DYNAMIC ANALYSIS, GRAPH & SIMULATION FOR THE PAST PAYMENTS */}
+                {loanInput.historicalPayments.length > 0 && (
+                  <div className="mt-5 pt-5 border-t border-slate-100 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5 text-slate-850 font-bold text-[11px]">
+                        <TrendingUp className="w-4 h-4 text-indigo-600 animate-pulse" />
+                        <span>เปรียบเทียบวงเงินผ่อนจริง vs กำหนด & จำลองแผนโปะ</span>
+                      </div>
+                      
+                      <div className="flex bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                        <button
+                          type="button"
+                          onClick={() => setLedgerVisualTab("balance")}
+                          className={`px-2.5 py-1 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                            ledgerVisualTab === "balance"
+                              ? "bg-white text-indigo-700 shadow-xs"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          หนี้ต้นคงเหลือ
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLedgerVisualTab("payments")}
+                          className={`px-2.5 py-1 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                            ledgerVisualTab === "payments"
+                              ? "bg-white text-indigo-700 shadow-xs"
+                              : "text-slate-500 hover:text-slate-800"
+                          }`}
+                        >
+                          ค่างวดรายงวด
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3.5 space-y-3.5 shadow-xs">
+                      {/* CHART PLOT AREA */}
+                      {(() => {
+                        const sim = getComparisonSimulations();
+                        if (!sim) return null;
+
+                        const { standardTimeline, actualTimeline, simulatedTimeline } = sim;
+
+                        // For balance rundown we add the contract start point at the beginning
+                        const fullStandard = ledgerVisualTab === "balance"
+                          ? [{ payDate: loanInput.contractStartDate, amount: 0, interest: 0, principal: 0, balance: loanInput.startingLoanAmount, monthIndex: "เริ่ม" }, ...standardTimeline]
+                          : standardTimeline;
+                        const fullActual = ledgerVisualTab === "balance"
+                          ? [{ payDate: loanInput.contractStartDate, amount: 0, interest: 0, principal: 0, balance: loanInput.startingLoanAmount, monthIndex: "เริ่ม" }, ...actualTimeline]
+                          : actualTimeline;
+                        const fullSimulated = ledgerVisualTab === "balance"
+                          ? [{ payDate: loanInput.contractStartDate, amount: 0, interest: 0, principal: 0, balance: loanInput.startingLoanAmount, monthIndex: "เริ่ม" }, ...simulatedTimeline]
+                          : simulatedTimeline;
+
+                        const M = fullActual.length;
+
+                        if (ledgerVisualTab === "balance") {
+                          // 1. Balance Run-down graph math
+                          const maxVal = Math.max(
+                            loanInput.startingLoanAmount,
+                            ...fullStandard.map(t => t.balance),
+                            ...fullActual.map(t => t.balance),
+                            ...fullSimulated.map(t => t.balance)
+                          );
+
+                          const minVal = Math.min(
+                            ...fullStandard.map(t => t.balance),
+                            ...fullActual.map(t => t.balance),
+                            ...fullSimulated.map(t => t.balance)
+                          );
+
+                          const diffY = maxVal - minVal || 1;
+
+                          const getCoords = (idx: number, val: number) => {
+                            const x = 50 + (idx / (M - 1 || 1)) * 420;
+                            const rawPct = (maxVal - val) / diffY;
+                            const pct = Math.max(0, Math.min(1, rawPct));
+                            const y = 25 + pct * 150;
+                            return { x, y };
+                          };
+
+                          let pStd = "";
+                          let pAct = "";
+                          let pSim = "";
+
+                          fullStandard.forEach((t, i) => {
+                            const { x, y } = getCoords(i, t.balance);
+                            pStd += (i === 0 ? "M " : " L ") + `${x.toFixed(1)},${y.toFixed(1)}`;
+                          });
+
+                          fullActual.forEach((t, i) => {
+                            const { x, y } = getCoords(i, t.balance);
+                            pAct += (i === 0 ? "M " : " L ") + `${x.toFixed(1)},${y.toFixed(1)}`;
+                          });
+
+                          fullSimulated.forEach((t, i) => {
+                            const { x, y } = getCoords(i, t.balance);
+                            pSim += (i === 0 ? "M " : " L ") + `${x.toFixed(1)},${y.toFixed(1)}`;
+                          });
+
+                          return (
+                            <div className="relative">
+                              <p className="text-[10px] font-bold text-slate-400 mb-2 text-center">
+                                กราฟจำลองความชันลดหลั่นหนี้เงินต้นคงเหลือ (บาท)
+                              </p>
+                              
+                              <svg viewBox="0 0 500 215" className="w-full h-auto overflow-visible select-none">
+                                {/* Grid lines */}
+                                {[0, 1, 2, 3, 4].map((tick) => {
+                                  const val = maxVal - (diffY * tick) / 4;
+                                  const y = 25 + (tick / 4) * 150;
+                                  return (
+                                    <g key={tick} className="opacity-40">
+                                      <line x1="50" y1={y} x2="480" y2={y} stroke="#e2e8f0" strokeWidth="0.5" strokeDasharray="3,3" />
+                                      <text x="45" y={y + 3} className="text-[8.5px] font-mono font-bold text-right text-slate-400" textAnchor="end">
+                                        {val >= 1000000 ? `${(val/1000000).toFixed(2)}M` : `${(val/1000).toFixed(0)}k`}
+                                      </text>
+                                    </g>
+                                  );
+                                })}
+
+                                {/* Lines */}
+                                <path d={pStd} fill="none" stroke="#f43f5e" strokeWidth="1.5" strokeDasharray="4,2" className="opacity-60" />
+                                <path d={pAct} fill="none" stroke="#059669" strokeWidth="2.5" />
+                                <path d={pSim} fill="none" stroke="#d97706" strokeWidth="2" strokeDasharray="3,1" />
+
+                                {/* Interactive Dots */}
+                                {fullActual.map((t, i) => {
+                                  const cStd = getCoords(i, fullStandard[i]?.balance ?? t.balance);
+                                  const cAct = getCoords(i, t.balance);
+                                  const cSim = getCoords(i, fullSimulated[i]?.balance ?? t.balance);
+
+                                  const isSelected = hoveredInstallmentIndex === i;
+
+                                  return (
+                                    <g key={i}>
+                                      {/* Standard Dot */}
+                                      <circle cx={cStd.x} cy={cStd.y} r={isSelected ? 4 : 2.5} fill="#f43f5e" />
+                                      {/* Actual Dot */}
+                                      <circle cx={cAct.x} cy={cAct.y} r={isSelected ? 5 : 3.5} fill="#059669" stroke="#fff" strokeWidth="1" />
+                                      {/* Simulated Dot */}
+                                      <circle cx={cSim.x} cy={cSim.y} r={isSelected ? 4 : 2.5} fill="#d97706" />
+
+                                      {/* Hover sensor zone */}
+                                      <rect
+                                        x={cAct.x - 12}
+                                        y="10"
+                                        width="24"
+                                        height="180"
+                                        fill="transparent"
+                                        className="cursor-pointer"
+                                        onMouseEnter={() => setHoveredInstallmentIndex(i)}
+                                        onMouseLeave={() => setHoveredInstallmentIndex(null)}
+                                      />
+                                    </g>
+                                  );
+                                })}
+
+                                {/* Bottom labels - REVERSED to match visual curve left-to-right (old -> new) */}
+                                {fullActual.map((t, i) => {
+                                  const x = 50 + (i / (M - 1 || 1)) * 420;
+                                  const labelStep = Math.max(1, Math.ceil(M / 6));
+                                  const shouldShow = i === 0 || i === M - 1 || i % labelStep === 0;
+                                  if (!shouldShow) return null;
+                                  
+                                  let labelText = t.monthIndex === "เริ่ม" ? "เริ่ม" : t.payDate.substring(0, 7);
+                                  if (labelText !== "เริ่ม" && t.payDate) {
+                                    const d = new Date(t.payDate);
+                                    labelText = d.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' });
+                                  }
+
+                                  return (
+                                    <text key={i} x={x} y="200" className="text-[8.5px] font-mono text-slate-400" textAnchor="middle">
+                                      {labelText}
+                                    </text>
+                                  );
+                                })}
+                              </svg>
+
+                              <div className="flex items-center justify-center gap-4 text-[9.5px] font-bold mt-2">
+                                <span className="flex items-center gap-1 text-rose-500">
+                                  <span className="w-3.5 h-0.5 border-t-2 border-rose-500 border-dashed inline-block"></span>
+                                  ธนาคารกำหนด
+                                </span>
+                                <span className="flex items-center gap-1 text-emerald-600 font-extraboldIcon">
+                                  <span className="w-3.5 h-0.5 border-t-2 border-emerald-600 inline-block"></span>
+                                  จ่ายจริง
+                                </span>
+                                <span className="flex items-center gap-1 text-amber-600">
+                                  <span className="w-3.5 h-0.5 border-t-2 border-amber-600 border-dotted inline-block"></span>
+                                  จำลองโปะเพิ่ม
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        } else {
+                          // 2. Payments comparison graph math
+                          const maxPayment = Math.max(
+                            ...fullStandard.map(t => t.amount),
+                            ...fullActual.map(t => t.amount),
+                            ...fullSimulated.map(t => t.amount),
+                            5000
+                          ) * 1.12;
+
+                          const getCoords = (idx: number, val: number) => {
+                            const x = 50 + (idx / (M - 1 || 1)) * 420;
+                            const y = 25 + (1 - val / maxPayment) * 150;
+                            return { x, y };
+                          };
+
+                          let pStd = "";
+                          let pAct = "";
+                          let pSim = "";
+
+                          fullStandard.forEach((t, i) => {
+                            const { x, y } = getCoords(i, t.amount);
+                            pStd += (i === 0 ? "M " : " L ") + `${x.toFixed(1)},${y.toFixed(1)}`;
+                          });
+
+                          fullActual.forEach((t, i) => {
+                            const { x, y } = getCoords(i, t.amount);
+                            pAct += (i === 0 ? "M " : " L ") + `${x.toFixed(1)},${y.toFixed(1)}`;
+                          });
+
+                          fullSimulated.forEach((t, i) => {
+                            const { x, y } = getCoords(i, t.amount);
+                            pSim += (i === 0 ? "M " : " L ") + `${x.toFixed(1)},${y.toFixed(1)}`;
+                          });
+
+                          return (
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 mb-2 text-center">
+                                เปรียบเทียบยอดการส่งค่างวดต่องวดชำระ (บาท)
+                              </p>
+
+                              <svg viewBox="0 0 500 215" className="w-full h-auto overflow-visible select-none">
+                                {/* Grid lines */}
+                                {[0, 1, 2, 3, 4].map((tick) => {
+                                  const val = maxPayment - (maxPayment * tick) / 4;
+                                  const y = 25 + (tick / 4) * 150;
+                                  return (
+                                    <g key={tick} className="opacity-40">
+                                      <line x1="50" y1={y} x2="480" y2={y} stroke="#e2e8f0" strokeWidth="0.5" strokeDasharray="3,3" />
+                                      <text x="45" y={y + 3} className="text-[8.5px] font-mono font-bold text-right text-slate-400" textAnchor="end">
+                                        {formatCurrency(val).replace("฿", "")}
+                                      </text>
+                                    </g>
+                                  );
+                                })}
+
+                                {/* Lines */}
+                                <path d={pStd} fill="none" stroke="#f43f5e" strokeWidth="1.5" strokeDasharray="4,2" className="opacity-60" />
+                                <path d={pAct} fill="none" stroke="#059669" strokeWidth="2.5" />
+                                <path d={pSim} fill="none" stroke="#d97706" strokeWidth="2" strokeDasharray="3,1" />
+
+                                {/* Interactive Dots */}
+                                {fullActual.map((t, i) => {
+                                  const cStd = getCoords(i, fullStandard[i]?.amount ?? t.amount);
+                                  const cAct = getCoords(i, t.amount);
+                                  const cSim = getCoords(i, fullSimulated[i]?.amount ?? t.amount);
+
+                                  const isSelected = hoveredInstallmentIndex === i;
+
+                                  return (
+                                    <g key={i}>
+                                      <circle cx={cStd.x} cy={cStd.y} r={isSelected ? 4 : 2.5} fill="#f43f5e" />
+                                      <circle cx={cAct.x} cy={cAct.y} r={isSelected ? 5 : 3.5} fill="#059669" stroke="#fff" strokeWidth="1" />
+                                      <circle cx={cSim.x} cy={cSim.y} r={isSelected ? 4 : 2.5} fill="#d97706" />
+
+                                      {/* Sensor zone */}
+                                      <rect
+                                        x={cAct.x - 12}
+                                        y="10"
+                                        width="24"
+                                        height="180"
+                                        fill="transparent"
+                                        className="cursor-pointer"
+                                        onMouseEnter={() => setHoveredInstallmentIndex(i)}
+                                        onMouseLeave={() => setHoveredInstallmentIndex(null)}
+                                      />
+                                    </g>
+                                  );
+                                })}
+
+                                {/* Bottom labels - REVERSED to match visual curve left-to-right (old -> new) */}
+                                {fullActual.map((t, i) => {
+                                  const x = 50 + (i / (M - 1 || 1)) * 420;
+                                  const labelStep = Math.max(1, Math.ceil(M / 6));
+                                  const shouldShow = i === 0 || i === M - 1 || i % labelStep === 0;
+                                  if (!shouldShow) return null;
+                                  
+                                  let labelText = (t.monthIndex === "แรกเริ่ม" || t.monthIndex === "เริ่ม") ? "เริ่ม" : t.payDate.substring(0, 7);
+                                  if (labelText !== "เริ่ม" && t.payDate) {
+                                    const d = new Date(t.payDate);
+                                    labelText = d.toLocaleDateString('th-TH', { month: 'short', year: '2-digit' });
+                                  }
+
+                                  return (
+                                    <text key={i} x={x} y="200" className="text-[8.5px] font-mono text-slate-400" textAnchor="middle">
+                                      {labelText}
+                                    </text>
+                                  );
+                                })}
+                              </svg>
+
+                              <div className="flex items-center justify-center gap-4 text-[9.5px] font-bold mt-2">
+                                <span className="flex items-center gap-1 text-rose-500">
+                                  <span className="w-3.5 h-0.5 border-t-2 border-rose-500 border-dashed inline-block"></span>
+                                  ธนาคารกำหนด
+                                </span>
+                                <span className="flex items-center gap-1 text-emerald-600">
+                                  <span className="w-3.5 h-0.5 border-t-2 border-emerald-600 inline-block"></span>
+                                  จ่ายจริง
+                                </span>
+                                <span className="flex items-center gap-1 text-amber-600 font-extraboldIcon">
+                                  <span className="w-3.5 h-0.5 border-t-2 border-amber-600 border-dotted inline-block"></span>
+                                  จำลองโปะเพิ่ม
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+                      })()}
+
+                      {/* Tooltip Card for hovered point */}
+                      {hoveredInstallmentIndex !== null && (() => {
+                        const sim = getComparisonSimulations();
+                        if (!sim) return null;
+                        const { standardTimeline, actualTimeline, simulatedTimeline } = sim;
+
+                        const fullStandard = ledgerVisualTab === "balance"
+                          ? [{ payDate: loanInput.contractStartDate, amount: 0, interest: 0, principal: 0, balance: loanInput.startingLoanAmount, monthIndex: "แรกเริ่ม" }, ...standardTimeline]
+                          : standardTimeline;
+                        const fullActual = ledgerVisualTab === "balance"
+                          ? [{ payDate: loanInput.contractStartDate, amount: 0, interest: 0, principal: 0, balance: loanInput.startingLoanAmount, monthIndex: "แรกเริ่ม" }, ...actualTimeline]
+                          : actualTimeline;
+                        const fullSimulated = ledgerVisualTab === "balance"
+                          ? [{ payDate: loanInput.contractStartDate, amount: 0, interest: 0, principal: 0, balance: loanInput.startingLoanAmount, monthIndex: "แรกเริ่ม" }, ...simulatedTimeline]
+                          : simulatedTimeline;
+
+                        const i = hoveredInstallmentIndex;
+                        const act = fullActual[i];
+                        const std = fullStandard[i];
+                        const sml = fullSimulated[i];
+
+                        if (!act || !std || !sml) return null;
+
+                        const isStartNode = ledgerVisualTab === "balance" && i === 0;
+
+                        return (
+                          <div className="bg-white border border-slate-200 text-slate-800 rounded-2xl p-4 text-[11px] shadow-lg space-y-2.5 animate-fadeIn">
+                            <div className="flex justify-between items-center border-b border-slate-100 pb-2">
+                              <span className="font-extrabold text-[10.5px] text-indigo-700 uppercase">
+                                {isStartNode ? "ตอนเริ่มต้นสัญญากู้" : `รายละเอียดค่างวดที่ ${act.monthIndex}`}
+                              </span>
+                              <span className="font-mono text-[9px] text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded border border-slate-200/50">{act.payDate}</span>
+                            </div>
+                            {isStartNode ? (
+                              <div className="text-center py-2 bg-indigo-50/50 border border-indigo-100/30 rounded-xl">
+                                <p className="text-[10px] text-indigo-900 font-bold">ยอดหนี้เงินต้นเริ่มแรกกู้</p>
+                                <p className="font-bold font-mono text-base text-indigo-700 mt-0.5">{formatCurrency(act.balance)}</p>
+                              </div>
+                            ) : (
+                              <div className="grid grid-cols-3 gap-2.5 text-center pt-1">
+                                <div className="p-2 rounded-xl bg-rose-50 border border-rose-100">
+                                  <p className="text-[8.5px] text-rose-600 font-bold uppercase tracking-wider">ธนาคารส่งเรียกเก็บ</p>
+                                  <p className="font-bold font-mono text-[13px] text-rose-700 mt-1">{formatCurrency(std.amount)}</p>
+                                  <div className="text-[8px] text-slate-500 font-mono mt-1.5 border-t border-rose-200/40 pt-1 leading-normal">
+                                    <div>ตัดดอก {formatCurrency(std.interest)}</div>
+                                    <div>ตัดต้น {formatCurrency(std.principal)}</div>
+                                  </div>
+                                </div>
+                                <div className="p-2 rounded-xl bg-emerald-50 border border-emerald-100">
+                                  <p className="text-[8.5px] text-emerald-600 font-bold uppercase tracking-wider">ยอดชำระจริง</p>
+                                  <p className="font-bold font-mono text-[13px] text-emerald-700 mt-1">{formatCurrency(act.amount)}</p>
+                                  <div className="text-[8px] text-slate-500 font-mono mt-1.5 border-t border-emerald-200/40 pt-1 leading-normal">
+                                    <div>ตัดดอก {formatCurrency(act.interest)}</div>
+                                    <div>ตัดต้น {formatCurrency(act.principal)}</div>
+                                  </div>
+                                </div>
+                                <div className="p-2 rounded-xl bg-amber-50 border border-amber-100">
+                                  <p className="text-[8.5px] text-amber-600 font-bold uppercase tracking-wider">ยอดตามแผนจำนองโปะ</p>
+                                  <p className="font-bold font-mono text-[13px] text-amber-700 mt-1">{formatCurrency(sml.amount)}</p>
+                                  <div className="text-[8px] text-slate-500 font-mono mt-1.5 border-t border-amber-200/40 pt-1 leading-normal">
+                                    <div>ตัดดอก {formatCurrency(sml.interest)}</div>
+                                    <div>ตัดต้น {formatCurrency(sml.principal)}</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            <div className="pt-2 flex justify-between items-center text-[9.5px] text-slate-500 border-t border-slate-100">
+                              <span>ลูกหนี้เงินต้นคงเหลือหลังการชำระ:</span>
+                              <span className="font-mono">
+                                ผ่อนจริง: <strong className="text-emerald-600">{formatCurrency(act.balance)}</strong> • 
+                                กำหนด: <strong className="text-rose-600">{formatCurrency(std.balance)}</strong>
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+
+                    {/* INTERPRETATION & INSIGHTS (แปลผลลัพธ์) */}
+                    {(() => {
+                      const sim = getComparisonSimulations();
+                      if (!sim) return null;
+                      const { stats } = sim;
+                      
+                      const actualPaid = stats.actual.totalPaid;
+                      const standardPaid = stats.standard.totalPaid;
+                      const actualInterest = stats.actual.totalInterest;
+                      const standardInterest = stats.standard.totalInterest;
+                      const actualEnding = stats.actual.endingBalance;
+                      const standardEnding = stats.standard.endingBalance;
+
+                      const diffPaid = actualPaid - standardPaid; 
+                      const diffInterest = standardInterest - actualInterest; 
+                      const diffPrincipal = standardEnding - actualEnding; 
+
+                      const behavesExtra = diffPaid > 1000;
+
+                      return (
+                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs space-y-3 shadow-xs">
+                          <p className="font-extrabold text-slate-750 flex items-center gap-1.5 text-[11.5px]">
+                            <Sparkles className="w-4 h-4 text-emerald-600 animate-pulse" />
+                            <span>แปลผลการผ่อนชำระประวัติย้อนหลังจริงเทียบกับสัญญากู้</span>
+                          </p>
+
+                          <div className="grid grid-cols-2 gap-2 text-center font-bold text-[10px]">
+                            <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-100 flex flex-col justify-center">
+                              <span className="text-[9px] text-slate-400">ประหยัดค่าดอกเบี้ยสะสมแล้ว</span>
+                              <span className="text-sm font-black text-emerald-700 font-mono mt-0.5">
+                                {diffInterest > 0 ? formatCurrency(diffInterest) : "฿0"}
+                              </span>
+                            </div>
+                            <div className="p-2.5 rounded-xl bg-indigo-50 border border-indigo-100 flex flex-col justify-center">
+                              <span className="text-[9px] text-slate-400">หักเงินต้นตัดหนี้บ้านเร็วขึ้น</span>
+                              <span className="text-sm font-black text-indigo-700 font-mono mt-0.5">
+                                {diffPrincipal > 0 ? formatCurrency(diffPrincipal) : "฿0"}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="text-[11px] text-slate-600 leading-relaxed space-y-2 bg-white p-3 rounded-xl border border-slate-100 shadow-2xs">
+                            {behavesExtra ? (
+                              <p>
+                                🎉 <strong>ยอดเยี่ยมอย่างยิ่ง!</strong> ยอดรวมส่งชำระสะสมของท่านสูงกว่ายอดกำหนดขั้นต่ำอยู่ 
+                                <strong className="text-emerald-600 font-mono"> {formatCurrency(diffPaid)}</strong> เงินปริมาณนี้ตัดหนี้ตรงไปที่ต้นเงิน ทลายเงินต้นลงต่ำกว่ากำหนดอีกถึง 
+                                <strong className="text-indigo-600 font-mono"> {formatCurrency(diffPrincipal)}</strong> ซึ่งทำให้ท่าน<strong>ประหยัดค่าดอกเบี้ยสะสมจ่ายไปแล้วถึง {formatCurrency(diffInterest)}</strong> ช่วยย่นระยะเวลาหนี้บ้านและให้อำนาจทางการเงินแก่ท่านอย่างทรงพลัง!
+                              </p>
+                            ) : diffPaid < -1000 ? (
+                              <p>
+                                ⚠️ <strong>โปรดระมัดระวัง!</strong> ยอดผ่อนชำระจริงของท่านน้อยกว่างวดขั้นต่ำตามสัญญารวม 
+                                <strong className="text-rose-600 font-mono"> {formatCurrency(Math.abs(diffPaid))}</strong> ส่งผลให้ยอดลูกหนี้รันช้ามาก ดอกเบี้ยพ่วงสะสมเพิ่มพูน แนะนำให้ปรับยอดหรือติดต่อสาขาตรวจสอบ
+                              </p>
+                            ) : (
+                              <p>
+                                📈 <strong>วิเคราะห์ยอดผ่อน:</strong> ท่านชำระยอดสะสมเท่าเกณฑ์ควบคุมของสัญญากู้เดิมแบบมาตรฐาน ยอดเงินต้นลดหลั่นตาม Amortization และสะสมเงินดอกเบี้ยธรรมดาตามปกติ มีความปลอดภัยและวินัยทางการเงินที่ดีเยี่ยม
+                              </p>
+                            )}
+
+                            <p className="text-[9.5px] text-slate-400 pt-1.5 border-t border-slate-100 mt-1.5 font-semibold">
+                              * สถิตินี้คำนวณจากค่างวดจริงและช่วงระยะเวลารายวัน (Daily Compounding Amortization) เพื่อความเที่ยงตรงเทียบเท่าเคาน์เตอร์ธนาคาร
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* SIMULATION SCENARIO SLIDER BLOCK */}
+                    <div className="bg-indigo-950/5 border border-indigo-150 rounded-2xl p-4 space-y-3.5 text-xs shadow-2xs">
+                      <div className="flex justify-between items-center">
+                        <span className="font-extrabold text-indigo-900 flex items-center gap-1.5">
+                          <Coins className="w-4 h-4 text-indigo-600" />
+                          จำลองเพิ่มเติม: ถ้าเปลี่ยนยอดโปะสม่ำเสมอละ?
+                        </span>
+                        <span className="bg-indigo-600 text-white font-mono font-bold text-[10.5px] px-2 py-0.5 rounded-lg shadow-sm">
+                          +{formatCurrency(simulatedPrepayAmount)} /ด.
+                        </span>
+                      </div>
+
+                      <p className="text-[10px] text-slate-500 leading-normal font-medium">
+                        ทดลองขยับแถบเลื่อนด้านล่าง เพื่อส่งข้อมูลยอด "โปะเพิ่มเฉลี่ยต่องวด" คาดการณ์ผลสัมฤทธิ์ลดหมดหนี้บ้านให้เร็วขึ้นตาเห็น
+                      </p>
+
+                      <div className="flex items-center gap-4 py-0.5">
+                        <input
+                          type="range"
+                          min="0"
+                          max="50000"
+                          step="1000"
+                          value={simulatedPrepayAmount}
+                          onChange={(e) => setSimulatedPrepayAmount(Number(e.target.value))}
+                          className="flex-1 accent-indigo-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg appearance-none"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setSimulatedPrepayAmount(0)}
+                          className="text-[10.5px] text-indigo-600 hover:text-indigo-800 font-extrabold underline cursor-pointer shrink-0 transition-colors"
+                        >
+                          ล้างเป็น 0
+                        </button>
+                      </div>
+
+                      {(() => {
+                        const sim = getComparisonSimulations();
+                        if (!sim) return null;
+                        const { stats } = sim;
+                        const savedInterest = stats.standard.totalInterest - stats.simulated.totalInterest;
+                        const excessPrincipal = stats.standard.endingBalance - stats.simulated.endingBalance;
+
+                        if (simulatedPrepayAmount === 0) {
+                          return (
+                            <p className="text-[10px] text-slate-400 text-center font-bold bg-white rounded-lg py-2 border border-dashed border-slate-205">
+                              ลองเลื่อนเพื่อคำนวณจุดเซฟดอกเบี้ยเพิ่มเติมต่องวดชำระ
+                            </p>
+                          );
+                        }
+
+                        return (
+                          <div className="bg-white rounded-xl p-3 border border-indigo-100 text-[11px] leading-relaxed text-indigo-950 font-bold shadow-2xs">
+                            💡 ผลของการโปะเพิ่มงวดละ <strong>{formatCurrency(simulatedPrepayAmount)}</strong>: 
+                            จะทำให้ท่านสามารถ<strong>เซฟค่าดอกเบี้ยบ้านไปได้อีกถึง {formatCurrency(savedInterest)}</strong> บาท 
+                            และตอกลิ่มถอนหนี้เงินต้นลงไปได้อีกรวมลึกว่าเดิม <strong>{formatCurrency(excessPrincipal)}</strong> บาท ณ ช่วงเวลาที่ผ่านมานี้ครับ!
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
+                )}
               </div>
 
+            </div>
+
+            {/* 2.5 ORIGINAL BANK RATE OFFERS AND 3-YEAR CALCULATION COMPARISON */}
+            <div className="bg-white rounded-2xl border border-slate-150 shadow-sm overflow-hidden flex flex-col">
+              <div className="p-4 bg-slate-900 border-b border-slate-800 flex justify-between items-center text-white">
+                <div>
+                  <h4 className="text-xs font-extrabold tracking-wide uppercase flex items-center gap-1.5">
+                    <Percent className="w-4 h-4 text-emerald-400" />
+                    3. ข้อเสนออัตราดอกเบี้ยสัญญาเดิม
+                  </h4>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    กรอกอัตราดอกเบี้ยและค่าผ่อนปัจจุบัน พร้อมคำนวณเปรียบเทียบดอกเบี้ยรวม 3 ปี
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 space-y-4">
+                {/* Bank / MRR Display */}
+                <div className="bg-slate-50 border border-slate-150 p-2.5 rounded-xl space-y-2">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-slate-700">ธนาคารเดิมปัจจุบัน:</span>
+                    {(() => {
+                      const cb = banksList.find(b => b.id === currentBankId);
+                      return (
+                        <span className="text-indigo-700 font-extrabold font-sans">
+                          {cb ? cb.nameTh : "ธนาคารเดิม"}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-slate-500">ค่า MRR ของธนาคารเดิม (%):</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-400 text-[10px] font-bold">MRR ปัจจุบัน:</span>
+                      <span className="font-mono font-bold text-slate-700 bg-slate-200/50 px-2 py-0.5 rounded border border-slate-200">
+                        {currentBankMrrVal.toFixed(2)}%
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Date Retention Started */}
+                <div className="bg-indigo-50/50 border border-indigo-150 p-2.5 rounded-xl space-y-1.5">
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="font-bold text-indigo-900">วันที่เริ่มสัญญา Retention / Refinance ใหม่:</span>
+                    <span className="font-bold text-indigo-700 font-mono text-[11px]">{loanInput.retentionStartDate}</span>
+                  </div>
+                  <input
+                    type="date"
+                    value={loanInput.retentionStartDate}
+                    onChange={(e) => handleRetentionStartDateChange(e.target.value)}
+                    className="w-full bg-white border border-indigo-200 focus:border-indigo-500 rounded-lg py-1 px-2.5 text-xs font-bold text-slate-850 outline-none transition"
+                  />
+                  <p className="text-[9px] text-indigo-950 font-semibold leading-relaxed">
+                    💡 กำหนดปฏิทินรอบลดดอกเบี้ย 3 ปีใหม่ (ตั้งค่าเริ่มต้นเป็นวันที่เริ่มสัญญาเดิม + 3 ปี) เพื่อใช้คำนวณวันจริงงวดที่ 1 - 36
+                  </p>
+                </div>
+
+                    {/* Grid of Year 1, 2, 3, 4+ rate configurations */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Year 1 */}
+                      <div className="bg-slate-50 border border-slate-150 p-2.5 rounded-xl space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10.5px] font-black text-slate-700">ปีที่ 1</span>
+                          <span className="text-[9px] text-emerald-700 font-mono bg-emerald-50 px-1 py-0.2 rounded font-black">
+                            {origSimRates.yr1.type === 'fixed'
+                              ? `${origSimRates.yr1.value.toFixed(2)}%`
+                              : `MRR-${Math.abs(origSimRates.yr1.value).toFixed(2)}% (${resolveRate(currentBankMrrVal, origSimRates.yr1).toFixed(2)}%)`
+                            }
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <select
+                            value={origSimRates.yr1.type}
+                            onChange={(e) => handleOrigSimRateChange("yr1", "type", e.target.value)}
+                            className="bg-white border border-slate-200 px-1 py-0.5 text-[10px] font-bold rounded-lg text-slate-600 outline-none"
+                          >
+                            <option value="fixed">Fixed</option>
+                            <option value="mrr">MRR Mod</option>
+                          </select>
+                          <input
+                            type="number"
+                            step="0.05"
+                            value={origSimRates.yr1.type === 'mrr' ? Math.abs(origSimRates.yr1.value) : origSimRates.yr1.value}
+                            onChange={(e) => handleOrigSimRateChange("yr1", "value", Number(e.target.value))}
+                            className="bg-white border border-slate-200 px-1 py-0.5 text-[10px] font-bold rounded-lg text-center outline-none w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[8.5px] text-slate-400 block font-bold leading-none mt-1">ค่างวดผ่อนปีที่ 1 (บาท/เดือน)</label>
+                          <input
+                            type="number"
+                            step="500"
+                            value={origSimInstallments.yr1}
+                            onChange={(e) => setOrigSimInstallments(prev => ({...prev, yr1: Number(e.target.value)}))}
+                            className="w-full bg-white border border-slate-200 px-1.5 py-1 text-[10px] font-bold rounded-lg mt-0.5 outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Year 2 */}
+                      <div className="bg-slate-50 border border-slate-150 p-2.5 rounded-xl space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10.5px] font-black text-slate-700">ปีที่ 2</span>
+                          <span className="text-[9px] text-emerald-700 font-mono bg-emerald-50 px-1 py-0.2 rounded font-black">
+                            {origSimRates.yr2.type === 'fixed'
+                              ? `${origSimRates.yr2.value.toFixed(2)}%`
+                              : `MRR-${Math.abs(origSimRates.yr2.value).toFixed(2)}% (${resolveRate(currentBankMrrVal, origSimRates.yr2).toFixed(2)}%)`
+                            }
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <select
+                            value={origSimRates.yr2.type}
+                            onChange={(e) => handleOrigSimRateChange("yr2", "type", e.target.value)}
+                            className="bg-white border border-slate-200 px-1 py-0.5 text-[10px] font-bold rounded-lg text-slate-600 outline-none"
+                          >
+                            <option value="fixed">Fixed</option>
+                            <option value="mrr">MRR Mod</option>
+                          </select>
+                          <input
+                            type="number"
+                            step="0.05"
+                            value={origSimRates.yr2.type === 'mrr' ? Math.abs(origSimRates.yr2.value) : origSimRates.yr2.value}
+                            onChange={(e) => handleOrigSimRateChange("yr2", "value", Number(e.target.value))}
+                            className="bg-white border border-slate-200 px-1 py-0.5 text-[10px] font-bold rounded-lg text-center outline-none w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[8.5px] text-slate-400 block font-bold leading-none mt-1">ค่างวดผ่อนปีที่ 2 (บาท/เดือน)</label>
+                          <input
+                            type="number"
+                            step="500"
+                            value={origSimInstallments.yr2}
+                            onChange={(e) => setOrigSimInstallments(prev => ({...prev, yr2: Number(e.target.value)}))}
+                            className="w-full bg-white border border-slate-200 px-1.5 py-1 text-[10px] font-bold rounded-lg mt-0.5 outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Year 3 */}
+                      <div className="bg-slate-50 border border-slate-150 p-2.5 rounded-xl space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10.5px] font-black text-slate-700">ปีที่ 3</span>
+                          <span className="text-[9px] text-emerald-700 font-mono bg-emerald-50 px-1 py-0.2 rounded font-black">
+                            {origSimRates.yr3.type === 'fixed'
+                              ? `${origSimRates.yr3.value.toFixed(2)}%`
+                              : `MRR-${Math.abs(origSimRates.yr3.value).toFixed(2)}% (${resolveRate(currentBankMrrVal, origSimRates.yr3).toFixed(2)}%)`
+                            }
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <select
+                            value={origSimRates.yr3.type}
+                            onChange={(e) => handleOrigSimRateChange("yr3", "type", e.target.value)}
+                            className="bg-white border border-slate-200 px-1 py-0.5 text-[10px] font-bold rounded-lg text-slate-600 outline-none"
+                          >
+                            <option value="fixed">Fixed</option>
+                            <option value="mrr">MRR Mod</option>
+                          </select>
+                          <input
+                            type="number"
+                            step="0.05"
+                            value={origSimRates.yr3.type === 'mrr' ? Math.abs(origSimRates.yr3.value) : origSimRates.yr3.value}
+                            onChange={(e) => handleOrigSimRateChange("yr3", "value", Number(e.target.value))}
+                            className="bg-white border border-slate-200 px-1 py-0.5 text-[10px] font-bold rounded-lg text-center outline-none w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[8.5px] text-slate-400 block font-bold leading-none mt-1">ค่างวดผ่อนปีที่ 3 (บาท/เดือน)</label>
+                          <input
+                            type="number"
+                            step="500"
+                            value={origSimInstallments.yr3}
+                            onChange={(e) => setOrigSimInstallments(prev => ({...prev, yr3: Number(e.target.value)}))}
+                            className="w-full bg-white border border-slate-200 px-1.5 py-1 text-[10px] font-bold rounded-lg mt-0.5 outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Year 4+ */}
+                      <div className="bg-slate-50 border border-slate-150 p-2.5 rounded-xl space-y-1.5">
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10.5px] font-black text-slate-700">ปีที่ 4+</span>
+                          <span className="text-[9px] text-emerald-700 font-mono bg-emerald-50 px-1 py-0.2 rounded font-black">
+                            {origSimRates.yr4Plus.type === 'fixed'
+                              ? `${origSimRates.yr4Plus.value.toFixed(2)}%`
+                              : `MRR-${Math.abs(origSimRates.yr4Plus.value).toFixed(2)}% (${resolveRate(currentBankMrrVal, origSimRates.yr4Plus).toFixed(2)}%)`
+                            }
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          <select
+                            value={origSimRates.yr4Plus.type}
+                            onChange={(e) => handleOrigSimRateChange("yr4Plus", "type", e.target.value)}
+                            className="bg-white border border-slate-200 px-1 py-0.5 text-[10px] font-bold rounded-lg text-slate-600 outline-none"
+                          >
+                            <option value="fixed">Fixed</option>
+                            <option value="mrr">MRR Mod</option>
+                          </select>
+                          <input
+                            type="number"
+                            step="0.05"
+                            value={origSimRates.yr4Plus.type === 'mrr' ? Math.abs(origSimRates.yr4Plus.value) : origSimRates.yr4Plus.value}
+                            onChange={(e) => handleOrigSimRateChange("yr4Plus", "value", Number(e.target.value))}
+                            className="bg-white border border-slate-200 px-1 py-0.5 text-[10px] font-bold rounded-lg text-center outline-none w-full"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[8.5px] text-slate-400 block font-bold leading-none mt-1">ค่างวดผ่อนปีที่ 4+ (บาท/เดือน)</label>
+                          <input
+                            type="number"
+                            step="500"
+                            value={origSimInstallments.yr4Plus}
+                            onChange={(e) => setOrigSimInstallments(prev => ({...prev, yr4Plus: Number(e.target.value)}))}
+                            className="w-full bg-white border border-slate-200 px-1.5 py-1 text-[10px] font-bold rounded-lg mt-0.5 outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+
+                {/* 3-Year Amortization Interest Calculation Results */}
+                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3.5 space-y-3">
+                  <p className="text-[11px] font-black text-indigo-950 flex items-center gap-1">
+                    <TrendingDown className="w-4 h-4 text-indigo-600" />
+                    <span>สรุปรวมผลดอกเบี้ยบ้าน 3 ปีแรกสัญญาปัจจุบัน</span>
+                  </p>
+
+                  <div className="flex items-center gap-1 text-[8.5px] text-indigo-700 font-bold bg-white/50 px-2 py-1 rounded">
+                    <HelpCircle className="w-3 h-3 shrink-0" />
+                    <span>คำนวณลดต้นลดดอกรายวันจริง: ยอดเงินต้นคงเหลือ × (อัตราดอกเบี้ยต่อปี ÷ 100) ÷ 365 × วันในเดือน</span>
+                  </div>
+                  
+                  {/* Prepayment Input Simulation */}
+                  <div className="bg-white/50 p-2 rounded-lg border border-indigo-100/50">
+                    <label className="text-[9px] font-bold text-slate-500 block mb-1">
+                      จำลองยอดโปะเพิ่มรายเดือน (บาท):
+                    </label>
+                    <input
+                      type="number"
+                      step="1000"
+                      value={simulatedPrepayAmount}
+                      onChange={(e) => setSimulatedPrepayAmount(Number(e.target.value))}
+                      className="w-full bg-white border border-slate-200 px-2 py-1 text-[10px] font-bold rounded-md outline-none focus:border-indigo-400 transition-colors"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2 text-[10.5px]">
+                    {/* Standard Case */}
+                    <div className="flex justify-between items-center font-bold text-slate-700">
+                      <span>1) ดอกเบี้ย 3 ปี (ยอดผ่อนปกติธนาคาร):</span>
+                      <span className="font-mono text-sm font-extrabold text-slate-950 border-b border-dashed border-slate-400">
+                        {formatCurrency(standardInt)}
+                      </span>
+                    </div>
+                    
+                    {/* Actual Prepayment Case */}
+                    <div className="flex justify-between items-center font-bold text-emerald-800">
+                      <span>2) ดอกเบี้ย 3 ปี (ผ่อนจริง + โปะสะสม):</span>
+                      <span className="font-mono text-sm font-extrabold text-emerald-900 border-b border-dashed border-emerald-400">
+                        {formatCurrency(actualInt)}
+                      </span>
+                    </div>
+
+                    {/* Saving Difference */}
+                    {savings > 0 && (
+                      <div className="pt-2 border-t border-indigo-200/50 flex justify-between items-center font-black text-emerald-700 text-[11px]">
+                        <span>💡 เซฟเงินค่าดอกเบี้ยไปได้สะสมพิเศษ:</span>
+                        <span className="font-mono text-sm font-black bg-emerald-100 px-2 py-0.5 rounded-lg text-emerald-800">
+                          +{formatCurrency(savings)} บาท
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Toggle button for monthly calculation schedule table */}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setShowStdAmortizationTable(!showStdAmortizationTable)}
+                        className="w-full text-center px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-bold text-[10px] rounded-lg transition-colors flex items-center justify-center gap-1 shadow-sm cursor-pointer"
+                      >
+                        <Calendar className="w-3.5 h-3.5" />
+                        <span>{showStdAmortizationTable ? "📊 ซ่อนตารางคำนวณดอกเบี้ย 3 ปี" : "📊 แสดงตารางคำนวณดอกเบี้ย 3 ปี"}</span>
+                      </button>
+                    </div>
+
+                    {showStdAmortizationTable && (
+                      <div className="mt-3 bg-white border border-indigo-150 rounded-lg overflow-hidden animate-fadeIn text-[9px] max-h-[300px] overflow-y-auto">
+                        <table className="w-full border-collapse">
+                          <thead className="bg-indigo-100 text-indigo-950 font-black border-b border-indigo-200 sticky top-0">
+                            <tr>
+                              <th className="py-1 px-1.5 text-center">งวดที่</th>
+                              <th className="py-1 px-1.5 text-center">ระยะเวลาคำนวณ (วัน)</th>
+                              <th className="py-1 px-1.5 text-right">เงินต้นคงเหลือ (บาท)</th>
+                              <th className="py-1 px-1.5 text-right">ดอกเบี้ย (บาท)</th>
+                              <th className="py-1 px-1.5 text-right">ค่างวด (บาท)</th>
+                              <th className="py-1 px-1.5 text-right">ตัดเงินต้น (บาท)</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-indigo-50 font-medium text-slate-700">
+                            {standardSchedule.map((row) => (
+                              <tr key={row.month} className="hover:bg-indigo-50/40 font-mono">
+                                <td className="py-1 px-1.5 text-center text-indigo-850 font-bold">{row.month}</td>
+                                <td className="py-1 px-1.5 text-center text-slate-500 font-medium whitespace-nowrap">
+                                  {row.dateRange} <span className="font-bold text-indigo-600">({row.days} วัน)</span>
+                                </td>
+                                <td className="py-1 px-1.5 text-right">{formatCurrency(row.begBal)}</td>
+                                <td className="py-1 px-1.5 text-right text-rose-700 font-bold">{formatCurrency(row.interest)}</td>
+                                <td className="py-1 px-1.5 text-right font-semibold text-slate-800">{formatCurrency(row.payment)}</td>
+                                <td className="py-1 px-1.5 text-right text-emerald-700">{formatCurrency(row.principal)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div className="font-bold text-[8.5px] p-2 bg-indigo-50/50 border-t border-indigo-100 text-indigo-950 space-y-0.5 leading-relaxed">
+                          <p>💡 <strong>สูตรคำนวณดอกเบี้ยแต่ละงวดแบบรายวันจริง:</strong></p>
+                          <p className="bg-white/80 p-1 rounded border border-indigo-100 font-mono text-[8px]">
+                            ดอกเบี้ย = ยอดเงินต้นคงเหลือ × (อัตราดอกเบี้ยต่อปี ÷ 100) ÷ 365 × จำนวนวันในงวด
+                          </p>
+                          <p>เงินที่ชำระปกติจะหักดอกเบี้ยออกก่อน ยอดเงินที่เหลือจะนำไปชำระเงินต้น ส่งผลให้ยอดต้นสะสมลดลงต่อเนื่อง (ลดต้นลดดอกเฉลี่ยรายวันจริง)</p>
+                          <p className="text-indigo-950">รวมดอกเบี้ยที่ต้องจ่าย 3 ปี (36 เดือน) = <strong className="text-red-700 font-mono text-[10px]">{formatCurrency(standardInt)} บาท</strong></p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+              </div>
             </div>
 
             {/* 2. TABBED CUSTOM RATE EDITORS AND TRANSACTIONAL COST PANELS */}
@@ -2996,13 +4495,17 @@ export default function App() {
                     <div className="relative bg-slate-900 border border-slate-800 rounded-2xl p-4 md:p-6 shadow-md overflow-hidden text-white">
                       <div className="relative h-64 w-full">
                         <svg className="w-full h-full overflow-visible" viewBox="0 0 500 200" preserveAspectRatio="none">
-                          <line x1="0" y1="20" x2="500" y2="20" stroke="#1e293b" strokeWidth="0.5" strokeDasharray="3" />
-                          <line x1="0" y1="85" x2="500" y2="85" stroke="#1e293b" strokeWidth="0.5" strokeDasharray="3" />
-                          <line x1="0" y1="150" x2="500" y2="150" stroke="#1e293b" strokeWidth="0.5" strokeDasharray="3" />
-                          <line x1="0" y1="200" x2="500" y2="200" stroke="#334155" strokeWidth="1" />
+                          <line x1="20" y1="20" x2="480" y2="20" stroke="#1e293b" strokeWidth="0.5" strokeDasharray="3" />
+                          <line x1="20" y1="85" x2="480" y2="85" stroke="#1e293b" strokeWidth="0.5" strokeDasharray="3" />
+                          <line x1="20" y1="150" x2="480" y2="150" stroke="#1e293b" strokeWidth="0.5" strokeDasharray="3" />
+                          <line x1="20" y1="200" x2="480" y2="200" stroke="#334155" strokeWidth="1" />
 
                           {(() => {
-                            const maxVal = loanInput.outstandingPrincipal;
+                            const maxVal = Math.max(
+                              loanInput.outstandingPrincipal,
+                              ...monthlyList.map(row => row.currentBalance),
+                              ...monthlyList.flatMap(row => pathwaysToSimulate.map(p => row.paths[p.id]?.balance || 0))
+                            );
                             const minVal = monthlyList[0] 
                               ? Math.min(
                                   monthlyList[35]?.currentBalance || 0,
@@ -3012,16 +4515,18 @@ export default function App() {
                             const diff = maxVal - minVal || 1;
 
                             const getSVGPoint = (month: number, value: number) => {
-                              const x = (month / 36) * 500;
-                              const ratio = (maxVal - value) / diff;
+                              // Incorporate 20px padding on left/right for safe visual margin
+                              const x = 20 + (month / 36) * 460;
+                              const rawRatio = (maxVal - value) / diff;
+                              const ratio = Math.max(0, Math.min(1, rawRatio));
                               const y = 20 + ratio * 155; 
                               return `${x.toFixed(1)},${y.toFixed(1)}`;
                             };
 
-                            let currentPoints = `0,${20}`;
+                            let currentPoints = `20,20`;
                             const pathPointsMap: Record<string, string> = {};
                             pathwaysToSimulate.forEach(p => {
-                              pathPointsMap[p.id] = `0,${20}`;
+                              pathPointsMap[p.id] = `20,20`;
                             });
 
                             monthlyList.forEach((row, idx) => {
@@ -3073,12 +4578,12 @@ export default function App() {
                         </div>
                       </div>
 
-                      {/* X-Axis Monthly */}
-                      <div className="flex justify-between text-[9px] font-bold text-slate-400 pt-2 border-t border-slate-800 font-mono select-none">
-                        <span>เดือน 1</span>
-                        <span>เดือน 12 (ปีที่ 1)</span>
-                        <span>เดือน 24 (ปีที่ 2)</span>
-                        <span>เดือน 36 (ปีที่ 3 สิ้นสุดโปรอภิสิทธิ์สัญญาลดหย่อน)</span>
+                      {/* X-Axis Monthly with symmetric padding */}
+                      <div className="flex justify-between text-[9px] font-bold text-slate-400 pt-2 border-t border-slate-800 font-mono select-none px-[20px]">
+                        <span>เริ่มต้น (0 ด.)</span>
+                        <span>ปีที่ 1 (12 ด.)</span>
+                        <span>ปีที่ 2 (24 ด.)</span>
+                        <span>ปีที่ 3 (36 ด.)</span>
                       </div>
                     </div>
                   </div>

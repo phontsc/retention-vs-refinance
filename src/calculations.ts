@@ -28,10 +28,10 @@ export function resolveRate(mrr: number, period: RatePeriod): number {
   if (period.type === "fixed") {
     return period.value;
   } else {
-    // mrr modifier, e.g. MRR - 3.50 (value is -3.50)
+    // mrr modifier, e.g. MRR - 3.50 (value is -3.50 or positive 3.50 automatically treated as discount)
     // Always restrict to non-negative rates
     const baseline = period.mrrBaseline || mrr;
-    return Math.max(0.1, baseline + period.value);
+    return Math.max(0.1, baseline - Math.abs(period.value));
   }
 }
 

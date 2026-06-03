@@ -49,6 +49,7 @@ export interface LoanInput {
 
   // Contract dates
   contractStartDate: string;        // วันที่เริ่มทำสัญญา เช่น "2024-01-01"
+  retentionStartDate: string;       // วันที่เริ่มสัญญาลดดอกเบี้ย / Retention / Refinance
   startingTermMonths: number;       // ระยะเวลาสัญญาเริ่มต้น (เดือน เช่น 360 ด = 30 ปี)
 
   // Related Transaction Expenses
