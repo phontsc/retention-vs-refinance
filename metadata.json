@@ -1,0 +1,8 @@
+{
+  "name": "Thai Home Loan Retention vs Refinance Calculator",
+  "description": "เครื่องมือเปรียบเทียบความคุ้มค่าการทำ Retention vs Refinance สินเชื่อบ้าน จาก 5 ธนาคารชั้นนำ พร้อมดึงข้อมูล MRR และอัตราดอกเบี้ยล่าสุดด้วย AI",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
