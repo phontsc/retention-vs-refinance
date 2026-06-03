@@ -272,22 +272,27 @@ app.get("/api/bot-mrr", async (req, res) => {
     console.log("Fetching exact BOT MRR rate:", url);
 
     const headers = {
-      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+      "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
       "Referer": "https://www.bot.or.th/th/statistics/interest-rate.html",
-      "Accept": "application/json"
+      "Accept": "application/json, text/plain, */*",
+      "Accept-Language": "th-TH,th;q=0.9,en;q=0.8"
     };
 
     const response = await fetch(url, { headers, signal: AbortSignal.timeout(6000) });
     if (response.ok) {
       const text = await response.text();
-      const parsed = JSON.parse(text);
-      if (parsed) {
-         return res.json({
-           mrr: parsed.mrr ? parseFloat(parsed.mrr) : null,
-           periodFromApi: parsed.periodFromApi || parsed.period,
-           bank: parsed.acronym,
-           historical: parsed.historicalResponseContent || []
-         });
+      if (text && text.trim().startsWith("{")) {
+        const parsed = JSON.parse(text);
+        if (parsed) {
+           return res.json({
+             mrr: parsed.mrr ? parseFloat(parsed.mrr) : null,
+             periodFromApi: parsed.periodFromApi || parsed.period,
+             bank: parsed.acronym,
+             historical: parsed.historicalResponseContent || []
+           });
+        }
+      } else {
+        console.warn(`BOT exact MRR endpoint returned non-JSON/HTML text: ${text ? text.slice(0, 100) : "empty"}`);
       }
     }
     

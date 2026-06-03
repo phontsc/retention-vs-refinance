@@ -117,31 +117,34 @@ export const MrtaCalculator: React.FC<MrtaCalculatorProps> = ({ loanInput, onUpd
         </div>
 
         {/* 5. Decreasing Rate Schema */}
-        <div className="col-span-2 space-y-1">
+        <div className="col-span-2 space-y-1.5">
           <div className="flex justify-between items-center">
             <label className="text-[9.5px] text-slate-500 font-extrabold uppercase font-sans">
               5. อัตราดอกเบี้ยลดหลั่นตารางเงินกู้ลดลง (Decreasing Rate)
             </label>
             <span className="text-[10px] text-indigo-700 font-bold font-mono font-sans">{currentDecreasingRate}% ต่อปี</span>
           </div>
-          <div className="flex gap-1.5">
-            {[8, 7, 6, 5].map((rate) => (
-              <button
-                key={rate}
-                type="button"
-                onClick={() => onUpdateLoanInput(prev => ({ ...prev, mrtaDecreasingRate: rate }))}
-                className={`flex-1 py-1 px-2 rounded-lg border text-[10.5px] font-bold transition-all cursor-pointer ${
-                  currentDecreasingRate === rate
-                    ? "bg-indigo-50 border-indigo-500 text-indigo-700 font-black"
-                    : "bg-white hover:bg-slate-50 border-slate-200 text-slate-600"
-                }`}
-              >
-                {rate}%
-              </button>
-            ))}
+          <div className="flex items-center gap-3 py-1">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value={currentDecreasingRate}
+              onChange={(e) => onUpdateLoanInput(prev => ({ ...prev, mrtaDecreasingRate: Number(e.target.value) }))}
+              className="flex-1 accent-indigo-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg appearance-none"
+            />
+          </div>
+          <div className="flex justify-between text-[9px] text-slate-400 font-bold font-mono px-0.5">
+            <span>0%</span>
+            <span>20%</span>
+            <span>40%</span>
+            <span>60%</span>
+            <span>80%</span>
+            <span>100%</span>
           </div>
           <p className="text-[8.5px] text-slate-400 leading-normal mt-1">
-            * มาตรฐานอ้างอิง MRTA บ้านทั่วไปจะใช้ตารางทุนประกันลดถอยลง (Decreasing Assured) เฉลี่ย 8% เพื่อสอดรับกับเงินต้นคงเหลือที่หักลดหย่อนลดลงในสัญญากู้
+            * สไลด์เพื่อกำหนด "อัตราดอกเบี้ยลดหลั่น" ในการคุ้มครองตามแผนประกัน (ทั่วไปอ้างอิงเฉลี่ย 8% เพื่อให้สอดคล้องกับตัดยอดต้นเงินกู้)
           </p>
         </div>
       </div>

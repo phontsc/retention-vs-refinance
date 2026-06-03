@@ -37,10 +37,30 @@ export function resolveRate(mrr: number, period: RatePeriod): number {
 
 // Calculate setup fees for a compared pathway
 export function computeCustomBankFees(principal: number, config: CustomBankConfig): number {
-  const mortgageFee = config.freeMortgageFee ? 0 : principal * (config.customMortgageFeeRate / 100);
+  const mortgageRate = config.customMortgageFeeRate !== undefined ? config.customMortgageFeeRate : 1.0;
+  const dutyStampRate = config.customDutyStampRate !== undefined ? config.customDutyStampRate : 0.05;
+
+  const mortgageFee = config.freeMortgageFee 
+    ? 0 
+    : (config.customMortgageFeeAmount !== undefined 
+        ? config.customMortgageFeeAmount 
+        : principal * (mortgageRate / 100));
+
   const appraisalFee = config.freeAppraisalFee ? 0 : config.customAppraisalFee;
-  const dutyStamp = config.freeDutyStamp ? 0 : principal * 0.0005; // 0.05%
-  return mortgageFee + appraisalFee + dutyStamp + config.otherFees;
+
+  const dutyStamp = config.freeDutyStamp 
+    ? 0 
+    : (config.customDutyStampAmount !== undefined 
+        ? config.customDutyStampAmount 
+        : principal * (dutyStampRate / 100));
+  
+  const otherFeesSum = config.customOtherFees && config.customOtherFees.length > 0
+    ? config.customOtherFees.reduce((sum, item) => sum + item.amount, 0)
+    : config.otherFees;
+
+  const firePremium = config.fireInsurancePremium || 0;
+
+  return mortgageFee + appraisalFee + dutyStamp + otherFeesSum + firePremium;
 }
 
 // Calculate MRTA premium based on original loan, age, and single/joint profile
@@ -111,22 +131,37 @@ export function performMultiAmortization(
 
   const totalOldBankExitCost = prepaymentCost + subsidyRefundCost + insurancePenaltyCost;
 
+  // 4. MRTA Surrender Value Refund (from old bank/insurance policy surrender)
+  const mrta1Surrender = (input.mrta1SumInsured * input.mrta1SurrenderRate3Yr) / 1000;
+  const mrta2Surrender = input.borrowerType === "joint" ? ((input.mrta2SumInsured ?? 0) * (input.mrta2SurrenderRate3Yr ?? 0)) / 1000 : 0;
+  const totalMrtaSurrenderRefund = mrta1Surrender + mrta2Surrender;
+
   // Initialize tracking for each compared refinance pathway
   const pathStates = pathways.map(path => {
     const setupFees = computeCustomBankFees(input.outstandingPrincipal, path);
-    const mrtaPremium = path.hasMrta 
-      ? computeMrtaPremium(
-          input.outstandingPrincipal,
-          input.borrowerAge,
-          input.borrowerType,
-          input.gender || "male",
-          Math.max(1, Math.round(input.remainingTermMonths / 12)),
-          input.mrtaDecreasingRate || 8
-        )
-      : 0;
     
-    // Total setup fees include physical setup fees + old exit costs + path's MRTA premium if any
-    const totalSetupAndAdjustments = setupFees + mrtaPremium + totalOldBankExitCost;
+    let mrtaPremium = 0;
+    if (path.hasMrta) {
+      if (path.customMrtaType === "joint") {
+        mrtaPremium = (path.customMrtaPremium1 ?? 0) + (path.customMrtaPremium2 ?? 0);
+      } else if (path.customMrtaType === "single") {
+        mrtaPremium = path.customMrtaPremium1 ?? 0;
+      } else {
+        mrtaPremium = path.customMrtaPremium !== undefined 
+          ? path.customMrtaPremium 
+          : computeMrtaPremium(
+              input.outstandingPrincipal,
+              input.borrowerAge,
+              input.borrowerType,
+              input.gender || "male",
+              Math.max(1, Math.round(input.remainingTermMonths / 12)),
+              input.mrtaDecreasingRate || 8
+            );
+      }
+    }
+    
+    // Total setup fees include physical setup fees + old exit costs + path's MRTA premium if any - totalMrtaSurrenderRefund (deducted as credit)
+    const totalSetupAndAdjustments = setupFees + mrtaPremium + totalOldBankExitCost - totalMrtaSurrenderRefund;
 
     return {
       config: path,
@@ -240,17 +275,27 @@ export function performMultiAmortization(
 
   const pathFullStates = pathways.map(path => {
     const setupFees = computeCustomBankFees(input.outstandingPrincipal, path);
-    const mrtaPremium = path.hasMrta 
-      ? computeMrtaPremium(
-          input.outstandingPrincipal,
-          input.borrowerAge,
-          input.borrowerType,
-          input.gender || "male",
-          Math.max(1, Math.round(input.remainingTermMonths / 12)),
-          input.mrtaDecreasingRate || 8
-        )
-      : 0;
-    const totalSetupAndAdjustments = setupFees + mrtaPremium + totalOldBankExitCost;
+    
+    let mrtaPremium = 0;
+    if (path.hasMrta) {
+      if (path.customMrtaType === "joint") {
+        mrtaPremium = (path.customMrtaPremium1 ?? 0) + (path.customMrtaPremium2 ?? 0);
+      } else if (path.customMrtaType === "single") {
+        mrtaPremium = path.customMrtaPremium1 ?? 0;
+      } else {
+        mrtaPremium = path.customMrtaPremium !== undefined 
+          ? path.customMrtaPremium 
+          : computeMrtaPremium(
+              input.outstandingPrincipal,
+              input.borrowerAge,
+              input.borrowerType,
+              input.gender || "male",
+              Math.max(1, Math.round(input.remainingTermMonths / 12)),
+              input.mrtaDecreasingRate || 8
+            );
+      }
+    }
+    const totalSetupAndAdjustments = setupFees + mrtaPremium + totalOldBankExitCost - totalMrtaSurrenderRefund;
 
     return {
       config: path,
@@ -358,7 +403,8 @@ export function performMultiAmortization(
         subsidyRefundCost: subsidyRefundCost,
         insurancePenaltyCost: insurancePenaltyCost,
         netExpense: s3Y.accumulatedPayment + s3Y.totalSetupAndAdjustments,
-        totalSavingsVsCurrent: threeYearSavings
+        totalSavingsVsCurrent: threeYearSavings,
+        mrtaSurrenderRefund: totalMrtaSurrenderRefund
       },
       fullTerm: {
         totalPaid: sFull.accumulatedPayment,
@@ -387,3 +433,193 @@ export function performMultiAmortization(
     }
   };
 }
+
+export interface ScoredPathway {
+  id: string;
+  nameTh: string;
+  type: "current" | "retention" | "refinance";
+  color: string;
+  savings: number;
+  setupFees: number;
+  breakevenMonths: number;
+  fixedMonths: number;
+  
+  // Scores 0-100
+  scoreSavings: number;
+  scoreLiquidity: number;
+  scoreBreakeven: number;
+  scoreStability: number;
+  scoreConvenience: number;
+  
+  compositeScore: number;
+  rank: number;
+  verdictTh: string;
+  tagTh: string;
+}
+
+export function computeSmartScores(
+  candidates: Array<{
+    id: string;
+    type: "current" | "retention" | "refinance";
+    nameTh: string;
+    color: string;
+    totalSetupFees: number;
+    savingsStandard: number;
+    savingsSimulated: number;
+    breakevenMonths: number;
+    fixedMonths: number; // pass the number of fixed periods in golden window (0 - 36 months)
+  }>,
+  outstandingPrincipal: number,
+  strategy: "balanced" | "max_savings" | "cash_preservation" | "maximum_convenience" | "rate_stability",
+  refiScheduleType: "standard" | "simulated"
+): ScoredPathway[] {
+  // Determine weights according to Selected Persona Goal
+  let wSavings = 0.40;
+  let wLiquidity = 0.20;
+  let wBreakeven = 0.15;
+  let wStability = 0.15;
+  let wConvenience = 0.10;
+
+  switch (strategy) {
+    case "max_savings":
+      wSavings = 0.70;
+      wLiquidity = 0.10;
+      wBreakeven = 0.10;
+      wStability = 0.05;
+      wConvenience = 0.05;
+      break;
+    case "cash_preservation":
+      wSavings = 0.15;
+      wLiquidity = 0.60;
+      wBreakeven = 0.15;
+      wStability = 0.05;
+      wConvenience = 0.05;
+      break;
+    case "maximum_convenience":
+      wSavings = 0.12;
+      wLiquidity = 0.13;
+      wBreakeven = 0.10;
+      wStability = 0.15;
+      wConvenience = 0.50;
+      break;
+    case "rate_stability":
+      wSavings = 0.15;
+      wLiquidity = 0.10;
+      wBreakeven = 0.10;
+      wStability = 0.55;
+      wConvenience = 0.10;
+      break;
+    case "balanced":
+    default:
+      wSavings = 0.40;
+      wLiquidity = 0.20;
+      wBreakeven = 0.15;
+      wStability = 0.15;
+      wConvenience = 0.10;
+      break;
+  }
+
+  // Find max savings to normalize savings score
+  const maxSavings = Math.max(0.1, ...candidates.map(c => refiScheduleType === "simulated" ? c.savingsSimulated : c.savingsStandard));
+
+  const scored: ScoredPathway[] = candidates.map(c => {
+    const savings = refiScheduleType === "simulated" ? c.savingsSimulated : c.savingsStandard;
+    
+    // Dimension 1: Savings Score (0-100)
+    // Relative to the absolute best savings option. If net savings are negative, score is 0.
+    const scoreSavings = savings > 0 ? Math.min(100, (savings / maxSavings) * 100) : 0;
+
+    // Dimension 2: Upfront Liquidity Score (0-100)
+    // Retention has 0 transactional fees, scored high. High fee options score lower.
+    const normFeesRatio = c.totalSetupFees / (outstandingPrincipal > 0 ? outstandingPrincipal : 1000000);
+    const scoreLiquidity = Math.max(0, Math.min(100, 100 - normFeesRatio * 1500));
+
+    // Dimension 3: Breakeven Speed Score (0-100)
+    // No breakeven (fees 0) or breakeven = 0 means immediate payout (100). Longer than 30 months is near 0.
+    let scoreBreakeven = 100;
+    if (c.breakevenMonths > 0) {
+      if (c.breakevenMonths > 36) {
+        scoreBreakeven = 0;
+      } else {
+        scoreBreakeven = Math.max(10, Math.min(100, 103 - (c.breakevenMonths * 2.8)));
+      }
+    } else if (c.totalSetupFees <= 100) {
+      // If upfront setup fees are tiny/none, there is no capital cost to recoup.
+      // To prevent bias that rewards a low-saving option with a flat 100, we tie breakeven score to savings score.
+      scoreBreakeven = Math.max(15, scoreSavings);
+    }
+
+    // Dimension 4: Rate Security / Stability Score (0-100)
+    // Fixed rate months in the first 3 years.
+    const scoreStability = Math.max(15, Math.min(100, (c.fixedMonths / 36) * 85 + 15));
+
+    // Dimension 5: Process Convenience Score (0-100)
+    // Stay (current) is 100. Retention is 85. Refinance is 55.
+    let scoreConvenience = 55;
+    if (c.type === "current") {
+      scoreConvenience = 100;
+    } else if (c.type === "retention") {
+      scoreConvenience = 85; // Optimized from 95 to avoid flat bias relative to Refinance options (55)
+    }
+
+    // Weighted composite score calculation
+    const compositeScore = Number(
+      (
+        scoreSavings * wSavings +
+        scoreLiquidity * wLiquidity +
+        scoreBreakeven * wBreakeven +
+        scoreStability * wStability +
+        scoreConvenience * wConvenience
+      ).toFixed(2)
+    );
+
+    // Custom text advice of verdict & custom tags
+    let verdictTh = "ตัวเลือกระดับปานกลาง";
+    let tagTh = "";
+
+    if (compositeScore >= 85) {
+      verdictTh = "แนะนำเป็นทางเลือกสูงสุด (ยอดเยี่ยมอย่างยิ่ง)";
+      tagTh = "🥇 แนะนำสูงสุด";
+    } else if (compositeScore >= 70) {
+      verdictTh = "ทางเลือกแนะนำที่ดีมาก สมดุลและคุ้มค่าสูง";
+      tagTh = "⭐️ คุ้มค่าน่าสนใจ";
+    } else if (compositeScore >= 50) {
+      verdictTh = "ตัวเลือกปานกลาง มีข้อจำกัดเฉพาะด้าน";
+      tagTh = "⚖️ ปานกลาง";
+    } else {
+      verdictTh = "ข้อเสนอนี้มีความคุ้มค่าเฉลี่ยค่อนข้างต่ำ";
+      tagTh = "⚠️ ไม่คุ้มเมื่อหักค่าครองธรรมเนียม";
+    }
+
+    return {
+      id: c.id,
+      nameTh: c.nameTh,
+      type: c.type,
+      color: c.color,
+      savings,
+      setupFees: c.totalSetupFees,
+      breakevenMonths: c.breakevenMonths,
+      fixedMonths: c.fixedMonths,
+      scoreSavings: Math.round(scoreSavings),
+      scoreLiquidity: Math.round(scoreLiquidity),
+      scoreBreakeven: Math.round(scoreBreakeven),
+      scoreStability: Math.round(scoreStability),
+      scoreConvenience: Math.round(scoreConvenience),
+      compositeScore,
+      verdictTh,
+      tagTh,
+      rank: 1
+    };
+  });
+
+  // Assign correct ranking based on composite score descending
+  const sorted = [...scored].sort((a, b) => b.compositeScore - a.compositeScore);
+  sorted.forEach((item, index) => {
+    item.rank = index + 1;
+  });
+
+  // Re-map back to keep original candidate order or sorted order.
+  // Actually, returning sorted order is fantastic and highly helpful! Let's return sorted.
+  return sorted;
+}
+

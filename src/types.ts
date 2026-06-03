@@ -108,6 +108,23 @@ export interface LoanInput {
   historicalPayments: HistoricalPayment[];
 }
 
+export interface RefiPackageConfig {
+  id: number;
+  label: string;
+  yr1: RatePeriod;
+  yr2: RatePeriod;
+  yr3: RatePeriod;
+  yr4Plus: RatePeriod;
+  freeMortgage: boolean;
+  hasMrta: boolean;
+}
+
+export interface CustomFeeItem {
+  id: string;
+  name: string;
+  amount: number;
+}
+
 // Representing a custom comparative path (whether Retention or a Refinance Bank option)
 export interface CustomBankConfig {
   id: string; // "ghb", "bbl", "retention", etc.
@@ -129,14 +146,31 @@ export interface CustomBankConfig {
   
   customAppraisalFee: number;
   customMortgageFeeRate: number; // 1%
+  customMortgageFeeAmount?: number; // จำนวนเงินจดจำนองโดยตรง (บาท)
+  customDutyStampRate?: number; // 0.05%
+  customDutyStampAmount?: number; // จำนวนเงินค่าอากรแสตมป์โดยตรง (บาท)
   otherFees: number;
+  customOtherFees?: CustomFeeItem[];
 
   // MRTA configuration for Refinance options
   hasMrta: boolean; // เลือกว่าจะทำประกัน MRTA หรือไม่ (เพื่อประหยัดดอกเบี้ยงวดทดแทน)
+  customMrtaPremium?: number; // จำนวนเงินเบี้ยประกัน MRTA โดยตรง (บาท)
+  customMrtaType?: "single" | "joint"; // รูปแบบประกันเดี่ยวหรือร่วม
+  customMrtaPremium1?: number; // จำนวนเงินเบี้ยคู่แรกหรือเดี่ยว (บาท)
+  customMrtaPremium2?: number; // จำนวนเงินเบี้ยคู่สอง (บาท)
   
+  // Fire Insurance for Refinance options
+  fireInsurancePremium?: number;
+  fireInsuranceDuration?: number;
+  fireSumInsured?: number;
+
   // Installment preference
   isInstallmentAdjusted: boolean;
   customInstallment: number;
+
+  // Dynamic Refinance packages
+  packages?: RefiPackageConfig[];
+  activePackageId?: number;
 }
 
 export interface AmortizationRow {
@@ -187,6 +221,7 @@ export interface PathComparisonStats {
     insurancePenaltyCost: number; // เบี้ยปรับกรณียกเลิกประกัน
     netExpense: number; // paid + setupFees + adjustments
     totalSavingsVsCurrent: number; // interest difference - overall fees
+    mrtaSurrenderRefund?: number; // คืนเงินประกันของสัญญาธนาคารเดิมที่เวนคืนได้ ณ ปลายปีที่ 3
   };
 
   // Full-term block metrics
